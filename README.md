@@ -8,8 +8,68 @@ All components are organized under the `CV_DSP` namespace.
 ### Directory Layout
 
 ```
-[![GitHubTree](https://img.shields.io/badge/GitHubTree-AUDIO__DSP-blue?style=flat-square)](https://githubtree.mgks.dev/repo/clovesrodrigues/AUDIO_DSP/main/?ref=badge)
+├── .github/
+│   └── FUNDING.yml
+├── CV_DSP/
+│   ├── Convolution/
+│   │   ├── ConvolutionEngine.hpp
+│   │   └── IRLoader.hpp
+│   ├── Core/
+│   │   ├── AudioBufferView.hpp
+│   │   ├── CircularBuffer.hpp
+│   │   ├── Config.hpp
+│   │   ├── Constants.hpp
+│   │   ├── DSPUtils.hpp
+│   │   ├── Namespace.hpp
+│   │   ├── ParameterSmoother.hpp
+│   │   ├── ProcessContext.hpp
+│   │   ├── Types.hpp
+│   │   └── Version.hpp
+│   ├── Delay/
+│   │   └── DelayLine.hpp
+│   ├── Dynamics/
+│   │   ├── Compressor.hpp
+│   │   ├── EnvelopeFollower.hpp
+│   │   ├── Expander.hpp
+│   │   ├── Limiter.hpp
+│   │   └── NoiseGate.hpp
+│   ├── Effects/
+│   │   ├── Chorus.hpp
+│   │   └── Flanger.hpp
+│   ├── Filters/
+│   │   ├── AllPassFilter.hpp
+│   │   ├── Biquad.hpp
+│   │   ├── DCBlocker.hpp
+│   │   ├── LadderFilter.hpp
+│   │   ├── OnePoleFilter.hpp
+│   │   └── StateVariableFilter.hpp
+│   ├── Guitar/
+│   │   └── CabinetSimulator.hpp
+│   ├── Math/
+│   │   ├── FastMath.hpp
+│   │   ├── Interpolation.hpp
+│   │   ├── LookupTable.hpp
+│   │   └── Oversampling.hpp
+│   ├── Modulation/
+│   │   ├── ADSR.hpp
+│   │   ├── LFO.hpp
+│   │   └── Oscillator.hpp
+│   ├── Saturation/
+│   │   ├── TapeSaturation.hpp
+│   │   ├── TubeSaturation.hpp
+│   │   └── Waveshaper.hpp
+│   ├── Spatial/
+│   │   ├── MidSide.hpp
+│   │   └── StereoWidth.hpp
+│   └── Spectral/
+│       ├── FFT.hpp
+│       ├── SpectrumAnalyzer.hpp
+│       ├── STFT.hpp
+│       └── WindowFunctions.hpp
+├── LICENSE
+└── README.md
 ```
+and more... 
 
 ## 🎯 Integration Graph
 
