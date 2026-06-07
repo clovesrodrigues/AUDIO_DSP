@@ -70,23 +70,6 @@ Input Signal
 | **ParameterSmoother** | None | Independent automation |
 | **EnvelopeFollower** | ? | Needs verification |
 
-## ✅ Correctness Checks
-
-### Location Verification
-
-- ✅ `CircularBuffer.hpp` → `CV_DSP/Core/CircularBuffer.hpp`
-- ✅ `DelayLine.hpp` → `CV_DSP/Delay/DelayLine.hpp`
-- ✅ `ParameterSmoother.hpp` → `CV_DSP/Core/ParameterSmoother.hpp`
-- ✅ `LFO.hpp` → `CV_DSP/Modulation/LFO.hpp`
-
-### Removed Duplicates
-
-- ❌ `Core/ParameterSmoother.hpp` (removed - was forward header)
-- ❌ `Core/CircularBuffer.hpp` (removed - was duplicate)
-- ❌ `Delay/DelayLine.hpp` (removed - was outdated version)
-
-## 🔗 Include Guidelines
-
 ### Correct Usage
 
 ```cpp
@@ -128,13 +111,6 @@ All delay effects use DelayLine with optional ParameterSmoother:
 - Flanger: DelayLine (delay muito curto)
 - Vibrato: DelayLine (pitch modulation)
 - Reverb: Multi-tap DelayLine
-
-### 3. Future Integrations
-
-- [ ] Filter + Compressor (frequency-dependent compression)
-- [ ] Saturation + Waveshaper (distortion chain)
-- [ ] Spatial effects (stereo widening)
-- [ ] Reverb (Schroeder reverberator with multiple DelayLines)
 
 ## 🚀 Usage Examples
 
