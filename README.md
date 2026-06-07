@@ -8,33 +8,7 @@ All components are organized under the `CV_DSP` namespace.
 ### Directory Layout
 
 ```
-AUDIO_DSP/
-├── CV_DSP/                          # Main library namespace
-│   ├── Core/                        # Foundation utilities
-│   │   ├── CircularBuffer.hpp       # ✓ Real-time safe circular buffer
-│   │   ├── ParameterSmoother.hpp    # ✓ Parameter automation (Linear/Exponential/OnePole)
-│   │   ├── Namespace.hpp
-│   │   ├── Types.hpp
-│   │   └── ...
-│   │
-│   ├── Delay/                       # Delay-based effects
-│   │   └── DelayLine.hpp            # ✓ Professional delay with fractional support
-│   │
-│   ├── Modulation/                  # Modulation sources
-│   │   └── LFO.hpp                  # ✓ Low Frequency Oscillator (sine/triangle/saw/square)
-│   │
-│   ├── Dynamics/                    # Dynamic processing
-│   │   ├── Compressor.hpp           # ✓ With ParameterSmoother integration
-│   │   └── EnvelopeFollower.hpp
-│   │
-│   ├── Effects/                     # Audio effects
-│   │   └── Chorus.hpp               # ✓ Uses DelayLine + LFO
-│   │
-│   └── ... (other modules)
-│
-├── REPOSITORY_STRUCTURE.md          # ← This file
-├── README.md
-└── LICENSE
+[![GitHubTree](https://img.shields.io/badge/GitHubTree-AUDIO__DSP-blue?style=flat-square)](https://githubtree.mgks.dev/repo/clovesrodrigues/AUDIO_DSP/main/?ref=badge)
 ```
 
 ## 🎯 Integration Graph
