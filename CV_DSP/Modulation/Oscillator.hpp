@@ -1,225 +1,278 @@
-#ifndef CVDSP_DYNAMICS_EXPANDER_HPP
-#define CVDSP_DYNAMICS_EXPANDER_HPP
+#ifndef CVDSP_MODULATION_OSCILLATOR_HPP
+#define CVDSP_MODULATION_OSCILLATOR_HPP
 
 /**
- * @file Expander.hpp
- * @brief Downward Expander
+ * @file Oscillator.hpp
+ * @brief Digital Oscillator
  *
  * Header-only
- * Real-Time Safe
  * C++20
+ * Real-Time Safe
+ * No dynamic allocation
  */
 
-#include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstddef>
-#include <limits>
+#include <cstdint>
+#include <type_traits>
+#include <algorithm>
 
 namespace cvdsp
 {
 
 /**
- * @brief Downward Expander
+ * @brief Oscillator waveform types.
+ */
+enum class OscillatorWaveform
+{
+    Sine,
+    Triangle,
+    Saw,
+    Square
+};
+
+/**
+ * @brief Digital oscillator using phase accumulator.
  *
- * Threshold em dBFS
- * Ratio >= 1
+ * Supports:
+ * - Sine
+ * - Triangle
+ * - Saw
+ * - Square
  *
- * Exemplo:
+ * Template:
  *
- * threshold = -40 dB
- * ratio = 4
- *
- * Sinais abaixo do threshold
- * serão progressivamente atenuados.
+ * float
+ * double
  */
 template<typename T>
-class Expander
+class Oscillator
 {
     static_assert(
         std::is_floating_point_v<T>,
-        "Expander requires floating point type");
+        "Oscillator requires floating point type");
 
 public:
 
-    constexpr Expander() noexcept = default;
+    constexpr Oscillator() noexcept = default;
 
     /**
-     * @brief Inicializa coeficientes.
+     * @brief Initialize oscillator.
      *
-     * @param sampleRate Taxa de amostragem
-     * @param attackMs Ataque em ms
-     * @param releaseMs Release em ms
-     * @param thresholdDb Threshold em dBFS
-     * @param ratio Ratio de expansão
+     * @param sampleRate Processing sample rate.
+     * @param frequency Initial frequency.
+     * @param waveform Waveform type.
      */
     void prepare(
         T sampleRate,
-        T attackMs,
-        T releaseMs,
-        T thresholdDb,
-        T ratio) noexcept
+        T frequency,
+        OscillatorWaveform waveform) noexcept
     {
-        sampleRate_ = sampleRate;
+        sampleRate_ =
+            std::max(
+                sampleRate,
+                static_cast<T>(1));
 
-        attackMs_ = std::max(
-            attackMs,
-            static_cast<T>(0.001));
+        waveform_ = waveform;
 
-        releaseMs_ = std::max(
-            releaseMs,
-            static_cast<T>(0.001));
-
-        thresholdDb_ = thresholdDb;
-
-        ratio_ = std::max(
-            ratio,
-            static_cast<T>(1));
-
-        attackCoeff_ =
-            computeTimeCoefficient(
-                attackMs_);
-
-        releaseCoeff_ =
-            computeTimeCoefficient(
-                releaseMs_);
+        setFrequency(frequency);
 
         reset();
     }
 
     /**
-     * @brief Reinicia estado interno.
+     * @brief Reset oscillator state.
      */
     void reset() noexcept
     {
-        envelopeDb_ = static_cast<T>(-120);
-        gainDb_ = static_cast<T>(0);
+        phase_ = static_cast<T>(0);
     }
 
     /**
-     * @brief Processa uma amostra.
+     * @brief Set oscillator frequency.
      *
-     * @param input Entrada
-     * @return Saída expandida
+     * @param frequency Frequency in Hz.
      */
-    inline T process(T input) noexcept
+    void setFrequency(
+        T frequency) noexcept
     {
-        constexpr T kMinDb =
-            static_cast<T>(-120);
-
-        constexpr T kEpsilon =
-            static_cast<T>(1e-30);
-
-        const T absInput =
-            std::abs(input);
-
-        const T levelDb =
-            static_cast<T>(20) *
-            std::log10(
-                std::max(
-                    absInput,
-                    kEpsilon));
-
-        const T detectorCoeff =
-            (levelDb > envelopeDb_)
-                ? attackCoeff_
-                : releaseCoeff_;
-
-        envelopeDb_ =
-            detectorCoeff * envelopeDb_
-            +
-            (static_cast<T>(1) - detectorCoeff)
-            * levelDb;
-
-        T targetGainDb =
+        constexpr T kMinFreq =
             static_cast<T>(0);
 
-        if (envelopeDb_ < thresholdDb_)
-        {
-            const T delta =
-                thresholdDb_ - envelopeDb_;
+        const T nyquist =
+            sampleRate_ *
+            static_cast<T>(0.5);
 
-            targetGainDb =
-                -delta *
-                (ratio_ - static_cast<T>(1));
+        frequency_ =
+            std::clamp(
+                frequency,
+                kMinFreq,
+                nyquist);
+
+        phaseIncrement_ =
+            frequency_ / sampleRate_;
+    }
+
+    /**
+     * @brief Set waveform.
+     *
+     * @param waveform New waveform.
+     */
+    void setWaveform(
+        OscillatorWaveform waveform) noexcept
+    {
+        waveform_ = waveform;
+    }
+
+    /**
+     * @brief Get current frequency.
+     */
+    [[nodiscard]]
+    T getFrequency() const noexcept
+    {
+        return frequency_;
+    }
+
+    /**
+     * @brief Generate one sample.
+     */
+    inline T process() noexcept
+    {
+        T output {};
+
+        switch (waveform_)
+        {
+            case OscillatorWaveform::Sine:
+            {
+                output = processSine();
+                break;
+            }
+
+            case OscillatorWaveform::Triangle:
+            {
+                output = processTriangle();
+                break;
+            }
+
+            case OscillatorWaveform::Saw:
+            {
+                output = processSaw();
+                break;
+            }
+
+            case OscillatorWaveform::Square:
+            {
+                output = processSquare();
+                break;
+            }
+
+            default:
+            {
+                output = static_cast<T>(0);
+                break;
+            }
         }
 
-        const T gainCoeff =
-            (targetGainDb < gainDb_)
-                ? attackCoeff_
-                : releaseCoeff_;
+        advancePhase();
 
-        gainDb_ =
-            gainCoeff * gainDb_
-            +
-            (static_cast<T>(1) - gainCoeff)
-            * targetGainDb;
-
-        gainDb_ =
-            std::clamp(
-                gainDb_,
-                kMinDb,
-                static_cast<T>(0));
-
-        const T linearGain =
-            dbToLinear(
-                gainDb_);
-
-        return input * linearGain;
+        return output;
     }
 
 private:
 
     /**
-     * @brief Converte dB para ganho linear.
+     * @brief Advance normalized phase.
+     *
+     * Range:
+     *
+     * [0,1)
      */
-    static constexpr T dbToLinear(
-        T db) noexcept
+    inline void advancePhase() noexcept
     {
-        return std::pow(
-            static_cast<T>(10),
-            db / static_cast<T>(20));
+        phase_ += phaseIncrement_;
+
+        if (phase_ >= static_cast<T>(1))
+        {
+            phase_ -= static_cast<T>(1);
+        }
     }
 
     /**
-     * @brief Coeficiente exponencial.
+     * @brief Sine oscillator.
      */
-    T computeTimeCoefficient(
-        T timeMs) const noexcept
+    inline T processSine() const noexcept
     {
-        const T timeSeconds =
-            timeMs *
-            static_cast<T>(0.001);
+        constexpr T kTwoPi =
+            static_cast<T>(
+                6.283185307179586476925286766559);
 
-        return std::exp(
-            static_cast<T>(-1)
-            /
-            (
-                sampleRate_
-                *
-                timeSeconds
-            ));
+        return std::sin(
+            phase_ * kTwoPi);
+    }
+
+    /**
+     * @brief Saw oscillator.
+     *
+     * Range:
+     *
+     * -1 ... +1
+     */
+    inline T processSaw() const noexcept
+    {
+        return
+            static_cast<T>(2) * phase_
+            -
+            static_cast<T>(1);
+    }
+
+    /**
+     * @brief Square oscillator.
+     *
+     * 50% duty cycle.
+     */
+    inline T processSquare() const noexcept
+    {
+        return
+            (phase_ < static_cast<T>(0.5))
+                ? static_cast<T>(1)
+                : static_cast<T>(-1);
+    }
+
+    /**
+     * @brief Triangle oscillator.
+     *
+     * Range:
+     *
+     * -1 ... +1
+     */
+    inline T processTriangle() const noexcept
+    {
+        return
+            static_cast<T>(1)
+            -
+            static_cast<T>(4)
+            *
+            std::abs(
+                phase_
+                -
+                static_cast<T>(0.5));
     }
 
 private:
 
-    T sampleRate_  = static_cast<T>(44100);
+    T sampleRate_ =
+        static_cast<T>(44100);
 
-    T thresholdDb_ = static_cast<T>(-40);
+    T frequency_ =
+        static_cast<T>(440);
 
-    T ratio_       = static_cast<T>(4);
+    T phase_ =
+        static_cast<T>(0);
 
-    T attackMs_    = static_cast<T>(5);
+    T phaseIncrement_ =
+        static_cast<T>(0);
 
-    T releaseMs_   = static_cast<T>(100);
-
-    T attackCoeff_ = static_cast<T>(0);
-
-    T releaseCoeff_ = static_cast<T>(0);
-
-    T envelopeDb_  = static_cast<T>(-120);
-
-    T gainDb_      = static_cast<T>(0);
+    OscillatorWaveform waveform_ =
+        OscillatorWaveform::Sine;
 };
 
 } // namespace cvdsp
