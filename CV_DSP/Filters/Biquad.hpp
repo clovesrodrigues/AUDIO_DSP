@@ -301,6 +301,58 @@ public:
      */
     inline void setGainDB(value_type gainDB) noexcept { m_gainDB = gainDB; }
 
+
+    /**
+     * @brief Configura e aplica um filtro peaking EQ em uma chamada.
+     */
+    inline void setPeak(
+        value_type sampleRate,
+        value_type frequencyHz,
+        value_type q,
+        value_type gainDB) noexcept
+    {
+        prepare(sampleRate);
+        setType(BiquadType::PeakingEQ);
+        setFrequency(frequencyHz);
+        setQ(q);
+        setGainDB(gainDB);
+        updateCoefficients();
+    }
+
+    /**
+     * @brief Configura e aplica uma low-shelf em uma chamada.
+     */
+    inline void setLowShelf(
+        value_type sampleRate,
+        value_type frequencyHz,
+        value_type q,
+        value_type gainDB) noexcept
+    {
+        prepare(sampleRate);
+        setType(BiquadType::LowShelf);
+        setFrequency(frequencyHz);
+        setQ(q);
+        setGainDB(gainDB);
+        updateCoefficients();
+    }
+
+    /**
+     * @brief Configura e aplica uma high-shelf em uma chamada.
+     */
+    inline void setHighShelf(
+        value_type sampleRate,
+        value_type frequencyHz,
+        value_type q,
+        value_type gainDB) noexcept
+    {
+        prepare(sampleRate);
+        setType(BiquadType::HighShelf);
+        setFrequency(frequencyHz);
+        setQ(q);
+        setGainDB(gainDB);
+        updateCoefficients();
+    }
+
     /**
      * @brief Recalcula os coeficientes a partir dos parâmetros atuais.
      *

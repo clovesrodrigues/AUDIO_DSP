@@ -120,7 +120,7 @@ public:
     {
         drive_ = drive;
 
-        driveSmoother_.setTargetValue(
+        driveSmoother_.setTarget(
             drive);
     }
 
@@ -145,7 +145,7 @@ public:
     {
         outputGain_ = gain;
 
-        outputSmoother_.setTargetValue(
+        outputSmoother_.setTarget(
             gain);
     }
 
@@ -286,10 +286,10 @@ private:
         MaxStages>
         stages_;
 
-    ParameterSmoother<T>
+    OnePoleSmoother<T>
         driveSmoother_;
 
-    ParameterSmoother<T>
+    OnePoleSmoother<T>
         outputSmoother_;
 };
 
