@@ -25,6 +25,8 @@
  * - VoxToneStack
  */
 
+#include <algorithm>
+#include <cmath>
 #include <type_traits>
 
 #include "../Filters/Biquad.hpp"
@@ -48,7 +50,14 @@ public:
         noexcept
     {
         sampleRate_ =
-            sampleRate;
+            (std::isfinite(sampleRate) && sampleRate > static_cast<T>(0))
+            ? sampleRate
+            : static_cast<T>(44100);
+
+        bassFilter_.prepare(sampleRate_);
+        midFilter_.prepare(sampleRate_);
+        trebleFilter_.prepare(sampleRate_);
+        presenceFilter_.prepare(sampleRate_);
 
         reset();
     }
@@ -70,28 +79,28 @@ public:
         T value)
         noexcept
     {
-        bass_ = value;
+        bass_ = clampControl(value);
     }
 
     virtual void setMid(
         T value)
         noexcept
     {
-        mid_ = value;
+        mid_ = clampControl(value);
     }
 
     virtual void setTreble(
         T value)
         noexcept
     {
-        treble_ = value;
+        treble_ = clampControl(value);
     }
 
     virtual void setPresence(
         T value)
         noexcept
     {
-        presence_ = value;
+        presence_ = clampControl(value);
     }
 
     [[nodiscard]]
@@ -122,6 +131,86 @@ public:
     T getSampleRate() const noexcept
     {
         return sampleRate_;
+    }
+
+protected:
+
+    [[nodiscard]]
+    static T clampControl(
+        T value) noexcept
+    {
+        if (!std::isfinite(value))
+        {
+            return static_cast<T>(0.5);
+        }
+
+        return std::clamp(
+            value,
+            static_cast<T>(0),
+            static_cast<T>(1));
+    }
+
+    static void configurePeak(
+        filters::Biquad<T>& filter,
+        T frequencyHz,
+        T q,
+        T gainDb) noexcept
+    {
+        filter.setType(
+            filters::BiquadType::PeakingEQ);
+
+        filter.setFrequency(
+            frequencyHz);
+
+        filter.setQ(
+            q);
+
+        filter.setGainDB(
+            gainDb);
+
+        filter.updateCoefficients();
+    }
+
+    static void configureLowShelf(
+        filters::Biquad<T>& filter,
+        T frequencyHz,
+        T q,
+        T gainDb) noexcept
+    {
+        filter.setType(
+            filters::BiquadType::LowShelf);
+
+        filter.setFrequency(
+            frequencyHz);
+
+        filter.setQ(
+            q);
+
+        filter.setGainDB(
+            gainDb);
+
+        filter.updateCoefficients();
+    }
+
+    static void configureHighShelf(
+        filters::Biquad<T>& filter,
+        T frequencyHz,
+        T q,
+        T gainDb) noexcept
+    {
+        filter.setType(
+            filters::BiquadType::HighShelf);
+
+        filter.setFrequency(
+            frequencyHz);
+
+        filter.setQ(
+            q);
+
+        filter.setGainDB(
+            gainDb);
+
+        filter.updateCoefficients();
     }
 
 protected:

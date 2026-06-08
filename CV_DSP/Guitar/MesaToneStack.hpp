@@ -62,10 +62,8 @@ public:
         noexcept override
     {
         this->bass_ =
-            std::clamp(
-                value,
-                T(0),
-                T(1));
+            ToneStack<T>::clampControl(
+                value);
 
         updateFilters();
     }
@@ -75,10 +73,8 @@ public:
         noexcept override
     {
         this->mid_ =
-            std::clamp(
-                value,
-                T(0),
-                T(1));
+            ToneStack<T>::clampControl(
+                value);
 
         updateFilters();
     }
@@ -88,10 +84,8 @@ public:
         noexcept override
     {
         this->treble_ =
-            std::clamp(
-                value,
-                T(0),
-                T(1));
+            ToneStack<T>::clampControl(
+                value);
 
         updateFilters();
     }
@@ -101,10 +95,8 @@ public:
         noexcept override
     {
         this->presence_ =
-            std::clamp(
-                value,
-                T(0),
-                T(1));
+            ToneStack<T>::clampControl(
+                value);
 
         updateFilters();
     }
@@ -164,38 +156,64 @@ private:
          * in traditional Mark circuits.
          */
 
-        const T bassGainDb =
-            static_cast<T>(-12)
-            +
-            (
-                this->bass_
-                *
-                static_cast<T>(18)
-            );
-
-        const T midGainDb =
-            static_cast<T>(-18)
+        const T midFocus =
+            static_cast<T>(500)
             +
             (
                 this->mid_
                 *
-                static_cast<T>(24)
+                static_cast<T>(450)
+            );
+
+        const T midQ =
+            static_cast<T>(0.75)
+            +
+            (
+                this->presence_
+                *
+                static_cast<T>(0.35)
+            );
+
+        const T bassGainDb =
+            static_cast<T>(-14)
+            +
+            (
+                this->bass_
+                *
+                static_cast<T>(20)
+            );
+
+        const T midGainDb =
+            static_cast<T>(-20)
+            +
+            (
+                this->mid_
+                *
+                static_cast<T>(28)
             );
 
         const T trebleGainDb =
-            static_cast<T>(-10)
+            static_cast<T>(-11)
             +
             (
                 this->treble_
                 *
-                static_cast<T>(26)
-            );
-
-        const T presenceGainDb =
+                static_cast<T>(27)
+            )
+            +
             (
                 this->presence_
                 *
-                static_cast<T>(14)
+                static_cast<T>(2)
+            );
+
+        const T presenceGainDb =
+            static_cast<T>(-1)
+            +
+            (
+                this->presence_
+                *
+                static_cast<T>(15)
             );
 
         /**
@@ -205,12 +223,11 @@ private:
          * and controlled.
          */
 
-        this->bassFilter_
-            .setLowShelf(
-                this->sampleRate_,
-                static_cast<T>(90.0),
-                static_cast<T>(0.707),
-                bassGainDb);
+        ToneStack<T>::configureLowShelf(
+            this->bassFilter_,
+            static_cast<T>(90.0),
+            static_cast<T>(0.707),
+            bassGainDb);
 
         /**
          * Characteristic mid control.
@@ -220,12 +237,11 @@ private:
          * when mids are reduced.
          */
 
-        this->midFilter_
-            .setPeak(
-                this->sampleRate_,
-                static_cast<T>(750.0),
-                static_cast<T>(0.9),
-                midGainDb);
+        ToneStack<T>::configurePeak(
+            this->midFilter_,
+            midFocus,
+            midQ,
+            midGainDb);
 
         /**
          * Treble control is extremely
@@ -235,23 +251,21 @@ private:
          * and perceived gain structure.
          */
 
-        this->trebleFilter_
-            .setHighShelf(
-                this->sampleRate_,
-                static_cast<T>(2200.0),
-                static_cast<T>(0.707),
-                trebleGainDb);
+        ToneStack<T>::configureHighShelf(
+            this->trebleFilter_,
+            static_cast<T>(2200.0),
+            static_cast<T>(0.707),
+            trebleGainDb);
 
         /**
          * Power amp presence region.
          */
 
-        this->presenceFilter_
-            .setHighShelf(
-                this->sampleRate_,
-                static_cast<T>(5000.0),
-                static_cast<T>(0.707),
-                presenceGainDb);
+        ToneStack<T>::configureHighShelf(
+            this->presenceFilter_,
+            static_cast<T>(5000.0),
+            static_cast<T>(0.707),
+            presenceGainDb);
     }
 };
 

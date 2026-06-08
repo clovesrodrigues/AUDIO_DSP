@@ -33,6 +33,8 @@
 #include <type_traits>
 
 #include "PentodeStage.hpp"
+#include "../Core/DSPUtils.hpp"
+#include "../Dynamics/EnvelopeFollower.hpp"
 
 namespace cvdsp
 {
@@ -49,7 +51,8 @@ public:
     enum class Model
     {
         EL34,
-        L6L6,
+        SixL6,
+        L6L6 = SixL6,
         KT88,
         EL84
     };
@@ -63,13 +66,39 @@ public:
         noexcept
     {
         sampleRate_ =
-            sampleRate;
+            DSPUtils::isFinite(sampleRate) && sampleRate > T(0)
+            ? sampleRate
+            : static_cast<T>(44100);
 
         stageA_.prepare(
-            sampleRate);
+            sampleRate_);
 
         stageB_.prepare(
-            sampleRate);
+            sampleRate_);
+
+        sagEnvelope_.prepare(
+            sampleRate_);
+
+        sagEnvelope_.setMode(
+            dynamics::EnvelopeMode::Peak);
+
+        sagEnvelope_.setAttackMs(
+            static_cast<T>(8));
+
+        sagEnvelope_.setReleaseMs(
+            static_cast<T>(140));
+
+        compressionEnvelope_.prepare(
+            sampleRate_);
+
+        compressionEnvelope_.setMode(
+            dynamics::EnvelopeMode::Peak);
+
+        compressionEnvelope_.setAttackMs(
+            static_cast<T>(3));
+
+        compressionEnvelope_.setReleaseMs(
+            static_cast<T>(70));
 
         configureModel();
 
@@ -82,8 +111,8 @@ public:
         stageA_.reset();
         stageB_.reset();
 
-        sagState_ =
-            T(0);
+        sagEnvelope_.reset();
+        compressionEnvelope_.reset();
     }
 
     void setModel(
@@ -105,52 +134,74 @@ public:
         T input)
         noexcept
     {
-        /**
-         * Dynamic supply sag.
-         */
+        if (!DSPUtils::isFinite(input))
+        {
+            input = T(0);
+        }
 
-        const T envelope =
-            std::abs(
+        input =
+            DSPUtils::killTiny(
                 input);
 
-        sagState_ +=
-            sagCoefficient_
-            *
-            (
-                envelope
-                -
-                sagState_
-            );
+        /**
+         * Dynamic supply sag.  The detector has attack/release memory and is
+         * sample-rate invariant through EnvelopeFollower coefficients.
+         */
+
+        const T sagEnvelope =
+            sagEnvelope_.process(
+                input);
 
         const T sagGain =
-            T(1)
-            -
-            (
-                sagAmount_
-                *
-                sagState_
-            );
+            DSPUtils::clamp(
+                T(1)
+                -
+                (
+                    sagAmount_
+                    *
+                    sagEnvelope
+                ),
+                kMinSagGain,
+                T(1));
 
-        T x =
+        const T driven =
             input
             *
             sagGain;
 
         /**
-         * Push-Pull approximation.
+         * Push-pull approximation: split phase, process complementary pentode
+         * branches, then recombine.  For a linear pair this collapses to unity;
+         * under bias/saturation it yields partial even-harmonic cancellation and
+         * stronger power-stage odd harmonics.
          */
 
-        x =
+        const T positive =
             stageA_.process(
-                x);
+                driven);
 
-        x =
-            stageB_.process(
-                x);
+        const T negative =
+            -stageB_.process(
+                -driven);
+
+        T x =
+            static_cast<T>(0.5)
+            *
+            (
+                positive
+                +
+                negative
+            );
 
         /**
-         * Dynamic compression.
+         * Dynamic compression after the virtual output pair.  This uses a second
+         * envelope so fast transients are retained while sustained level bends
+         * the supply/transfer response naturally.
          */
+
+        const T compressionEnvelope =
+            compressionEnvelope_.process(
+                x);
 
         const T compression =
             T(1)
@@ -160,12 +211,14 @@ public:
                 +
                 compressionAmount_
                 *
-                std::abs(x)
+                compressionEnvelope
             );
 
         x *= compression;
 
-        return x;
+        return
+            DSPUtils::killTiny(
+                x);
     }
 
 private:
@@ -181,13 +234,13 @@ private:
                     static_cast<T>(3.0));
 
                 stageB_.setDrive(
-                    static_cast<T>(2.8));
+                    static_cast<T>(3.0));
 
                 stageA_.setBias(
-                    static_cast<T>(0.05));
+                    static_cast<T>(0.045));
 
                 stageB_.setBias(
-                    static_cast<T>(-0.05));
+                    static_cast<T>(-0.045));
 
                 stageA_.setScreenVoltage(
                     static_cast<T>(420));
@@ -199,18 +252,24 @@ private:
                     static_cast<T>(0.12);
 
                 compressionAmount_ =
-                    static_cast<T>(0.30);
+                    static_cast<T>(0.28);
 
                 break;
             }
 
-            case Model::L6L6:
+            case Model::SixL6:
             {
                 stageA_.setDrive(
                     static_cast<T>(2.2));
 
                 stageB_.setDrive(
                     static_cast<T>(2.2));
+
+                stageA_.setBias(
+                    static_cast<T>(0.025));
+
+                stageB_.setBias(
+                    static_cast<T>(-0.025));
 
                 stageA_.setScreenVoltage(
                     static_cast<T>(460));
@@ -235,6 +294,12 @@ private:
                 stageB_.setDrive(
                     static_cast<T>(1.8));
 
+                stageA_.setBias(
+                    static_cast<T>(0.015));
+
+                stageB_.setBias(
+                    static_cast<T>(-0.015));
+
                 stageA_.setScreenVoltage(
                     static_cast<T>(520));
 
@@ -256,7 +321,13 @@ private:
                     static_cast<T>(4.0));
 
                 stageB_.setDrive(
-                    static_cast<T>(3.8));
+                    static_cast<T>(4.0));
+
+                stageA_.setBias(
+                    static_cast<T>(0.060));
+
+                stageB_.setBias(
+                    static_cast<T>(-0.060));
 
                 stageA_.setScreenVoltage(
                     static_cast<T>(310));
@@ -268,7 +339,7 @@ private:
                     static_cast<T>(0.18);
 
                 compressionAmount_ =
-                    static_cast<T>(0.40);
+                    static_cast<T>(0.38);
 
                 break;
             }
@@ -283,6 +354,9 @@ private:
 
 private:
 
+    static constexpr T kMinSagGain =
+        static_cast<T>(0.35);
+
     T sampleRate_ =
         static_cast<T>(44100);
 
@@ -295,11 +369,11 @@ private:
     PentodeStage<T>
         stageB_;
 
-    T sagState_ =
-        T(0);
+    dynamics::EnvelopeFollower<T>
+        sagEnvelope_;
 
-    T sagCoefficient_ =
-        static_cast<T>(0.001);
+    dynamics::EnvelopeFollower<T>
+        compressionEnvelope_;
 
     T sagAmount_ =
         static_cast<T>(0.10);

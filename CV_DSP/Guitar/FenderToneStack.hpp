@@ -61,10 +61,8 @@ public:
         noexcept override
     {
         ToneStack<T>::bass_ =
-            std::clamp(
-                value,
-                T(0),
-                T(1));
+            ToneStack<T>::clampControl(
+                value);
 
         updateFilters();
     }
@@ -74,10 +72,8 @@ public:
         noexcept override
     {
         ToneStack<T>::mid_ =
-            std::clamp(
-                value,
-                T(0),
-                T(1));
+            ToneStack<T>::clampControl(
+                value);
 
         updateFilters();
     }
@@ -87,10 +83,8 @@ public:
         noexcept override
     {
         ToneStack<T>::treble_ =
-            std::clamp(
-                value,
-                T(0),
-                T(1));
+            ToneStack<T>::clampControl(
+                value);
 
         updateFilters();
     }
@@ -131,31 +125,65 @@ private:
     void updateFilters()
         noexcept
     {
+        const T bassInteraction =
+            this->bass_
+            -
+            static_cast<T>(0.5);
+
+        const T trebleInteraction =
+            this->treble_
+            -
+            static_cast<T>(0.5);
+
         const T bassGainDb =
-            static_cast<T>(-12)
+            static_cast<T>(-14)
             +
             (
                 this->bass_
                 *
-                static_cast<T>(24)
+                static_cast<T>(22)
+            )
+            -
+            (
+                trebleInteraction
+                *
+                static_cast<T>(2)
             );
 
         const T midGainDb =
-            static_cast<T>(-15)
+            static_cast<T>(-18)
             +
             (
                 this->mid_
                 *
-                static_cast<T>(15)
+                static_cast<T>(20)
+            )
+            +
+            (
+                bassInteraction
+                *
+                static_cast<T>(2)
+            )
+            -
+            (
+                trebleInteraction
+                *
+                static_cast<T>(3)
             );
 
         const T trebleGainDb =
-            static_cast<T>(-12)
+            static_cast<T>(-13)
             +
             (
                 this->treble_
                 *
                 static_cast<T>(24)
+            )
+            -
+            (
+                bassInteraction
+                *
+                static_cast<T>(2)
             );
 
         /**
@@ -164,34 +192,31 @@ private:
          * Fender low shelf.
          */
 
-        this->bassFilter_
-            .setLowShelf(
-                this->sampleRate_,
-                static_cast<T>(80.0),
-                static_cast<T>(0.707),
-                bassGainDb);
+        ToneStack<T>::configureLowShelf(
+            this->bassFilter_,
+            static_cast<T>(80.0),
+            static_cast<T>(0.707),
+            bassGainDb);
 
         /**
          * Mid Scoop Region.
          */
 
-        this->midFilter_
-            .setPeak(
-                this->sampleRate_,
-                static_cast<T>(450.0),
-                static_cast<T>(0.7),
-                midGainDb);
+        ToneStack<T>::configurePeak(
+            this->midFilter_,
+            static_cast<T>(450.0),
+            static_cast<T>(0.7),
+            midGainDb);
 
         /**
          * Treble Shelf.
          */
 
-        this->trebleFilter_
-            .setHighShelf(
-                this->sampleRate_,
-                static_cast<T>(4000.0),
-                static_cast<T>(0.707),
-                trebleGainDb);
+        ToneStack<T>::configureHighShelf(
+            this->trebleFilter_,
+            static_cast<T>(4000.0),
+            static_cast<T>(0.707),
+            trebleGainDb);
     }
 };
 

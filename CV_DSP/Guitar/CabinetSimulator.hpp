@@ -23,7 +23,10 @@
  * No dynamic allocation inside process().
  */
 
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <type_traits>
 
 #include "../Convolution/IRLoader.hpp"
@@ -51,7 +54,30 @@ public:
      */
     bool prepare() noexcept
     {
+        hostSampleRate_ =
+            static_cast<T>(44100);
+
+        sampleRateCheckEnabled_ = false;
         cabinetLoaded_ = false;
+        sampleRateMatched_ = true;
+
+        return convolution_.prepare();
+    }
+
+    /**
+     * @brief Prepare convolution engine with host sample rate.
+     */
+    bool prepare(
+        T sampleRate) noexcept
+    {
+        hostSampleRate_ =
+            (std::isfinite(sampleRate) && sampleRate > T(0))
+            ? sampleRate
+            : static_cast<T>(44100);
+
+        sampleRateCheckEnabled_ = true;
+        cabinetLoaded_ = false;
+        sampleRateMatched_ = true;
 
         return convolution_.prepare();
     }
@@ -88,6 +114,28 @@ public:
             return false;
         }
 
+        const std::uint32_t irSampleRate =
+            loader_.getSampleRate();
+
+        sampleRateMatched_ =
+            !sampleRateCheckEnabled_
+            ||
+            irSampleRate == 0
+            ||
+            std::abs(
+                static_cast<T>(irSampleRate)
+                -
+                hostSampleRate_)
+                <
+                static_cast<T>(1);
+
+        if (!sampleRateMatched_)
+        {
+            loader_.unload();
+
+            return false;
+        }
+
         const T* ir =
             loader_.getChannel(0);
 
@@ -116,6 +164,7 @@ public:
         convolution_.reset();
 
         cabinetLoaded_ = false;
+        sampleRateMatched_ = true;
     }
 
     /**
@@ -163,6 +212,26 @@ public:
     }
 
     /**
+     * @brief Host sample rate used for IR compatibility checks.
+     */
+    [[nodiscard]]
+    T getHostSampleRate()
+        const noexcept
+    {
+        return hostSampleRate_;
+    }
+
+    /**
+     * @brief True when the loaded IR sample rate matches the host rate.
+     */
+    [[nodiscard]]
+    bool isSampleRateMatched()
+        const noexcept
+    {
+        return sampleRateMatched_;
+    }
+
+    /**
      * @brief Access IR loader.
      */
     [[nodiscard]]
@@ -187,7 +256,14 @@ private:
         MaxIRSamples>
         convolution_;
 
+    T hostSampleRate_ =
+        static_cast<T>(44100);
+
     bool cabinetLoaded_ = false;
+
+    bool sampleRateCheckEnabled_ = false;
+
+    bool sampleRateMatched_ = true;
 };
 
 /**
