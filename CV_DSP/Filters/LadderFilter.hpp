@@ -22,7 +22,7 @@
 #include <numbers>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::filters
 {
 
 /**
@@ -264,6 +264,12 @@ private:
         static_cast<T>(0);
 };
 
+} // namespace cvdsp::filters
+
+namespace cvdsp
+{
+template<typename T>
+using LadderFilter = filters::LadderFilter<T>;
 } // namespace cvdsp
 
 #endif

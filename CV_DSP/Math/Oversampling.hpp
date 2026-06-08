@@ -24,7 +24,6 @@
 #include <array>
 #include <cstddef>
 #include <type_traits>
-#include <algorithm>
 
 namespace cvdsp
 {

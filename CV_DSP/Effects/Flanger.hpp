@@ -15,7 +15,6 @@
  */
 
 #include <algorithm>
-#include <cmath>
 #include <type_traits>
 
 #include "../Delay/DelayLine.hpp"
@@ -77,9 +76,14 @@ public:
                 sampleRate,
                 static_cast<T>(1));
 
+        maxDelayMs_ =
+            std::clamp(
+                maxDelayMs,
+                static_cast<T>(1),
+                delayMaxMilliseconds());
+
         delay_.prepare(
-            sampleRate_,
-            maxDelayMs);
+            static_cast<typename delay::DelayLine<T>::size_type>(sampleRate_));
 
         lfo_.prepare(
             sampleRate_,
@@ -179,15 +183,18 @@ public:
             lfo_.process();
 
         const T delayMs =
-            baseDelayMs_
-            +
-            (
-                maxModulationMs_
-                *
-                depth_
-                *
-                modulation
-            );
+            std::clamp(
+                baseDelayMs_
+                +
+                (
+                    maxModulationMs_
+                    *
+                    depth_
+                    *
+                    modulation
+                ),
+                static_cast<T>(0),
+                maxDelayMs_);
 
         const T delayed =
             delay_.readInterpolated(
@@ -234,7 +241,15 @@ public:
 
 private:
 
-    DelayLine<T> delay_;
+    [[nodiscard]]
+    T delayMaxMilliseconds() const noexcept
+    {
+        return static_cast<T>(delay::DelayLine<T>::getMaxDelaySamples())
+               * static_cast<T>(1000)
+               / sampleRate_;
+    }
+
+    delay::DelayLine<T> delay_;
 
     LFO<T> lfo_;
 
@@ -266,6 +281,9 @@ private:
      */
     T maxModulationMs_ =
         static_cast<T>(3.0);
+
+    T maxDelayMs_ =
+        static_cast<T>(20.0);
 
     T feedbackSample_ =
         static_cast<T>(0);
