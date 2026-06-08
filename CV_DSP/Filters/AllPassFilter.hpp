@@ -22,7 +22,7 @@
 
 #include "../Delay/DelayLine.hpp"
 
-namespace cvdsp
+namespace cvdsp::filters
 {
 
 /**
@@ -146,7 +146,7 @@ public:
         T input) noexcept
     {
         const T delayed =
-            delay_.readSamples(
+            delay_.readIntegerSamples(
                 delaySamples_);
 
         const T output =
@@ -186,6 +186,12 @@ private:
         1;
 };
 
+} // namespace cvdsp::filters
+
+namespace cvdsp
+{
+template<typename T>
+using AllPassFilter = filters::AllPassFilter<T>;
 } // namespace cvdsp
 
 #endif

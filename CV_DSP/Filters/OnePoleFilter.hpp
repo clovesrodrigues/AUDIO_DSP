@@ -5,8 +5,6 @@
 #include <cmath>
 #include <cstddef>
 #include <type_traits>
-#include <limits>
-#include <array>
 #include <cassert>
 
 /**

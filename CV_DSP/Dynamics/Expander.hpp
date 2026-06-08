@@ -11,12 +11,11 @@
  */
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
-#include <limits>
+#include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::dynamics
 {
 
 /**
@@ -222,6 +221,12 @@ private:
     T gainDb_      = static_cast<T>(0);
 };
 
+} // namespace cvdsp::dynamics
+
+namespace cvdsp
+{
+template<typename T>
+using Expander = dynamics::Expander<T>;
 } // namespace cvdsp
 
 #endif

@@ -1167,9 +1167,11 @@ public:
 
     /**
      * @brief Lê uma amostra atrasada por um número inteiro de amostras.
+     *
+     * Nome separado evita ambiguidade com literais inteiros em readSamples().
      */
     [[nodiscard]]
-    inline value_type readSamples(size_type delayInSamples) const noexcept
+    inline value_type readIntegerSamples(size_type delayInSamples) const noexcept
     {
         return readDelaySamples(static_cast<value_type>(delayInSamples));
     }
