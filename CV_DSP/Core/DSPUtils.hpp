@@ -16,7 +16,6 @@
  * Dependencies:
  * - Core/Constants.hpp
  * - Core/Types.hpp
- * - Math/FastMath.hpp
  */
 
 #include <algorithm>
@@ -26,7 +25,6 @@
 
 #include "Constants.hpp"
 #include "Types.hpp"
-#include "../Math/FastMath.hpp"
 
 namespace cvdsp
 {

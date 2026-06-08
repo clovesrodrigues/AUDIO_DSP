@@ -1,6 +1,7 @@
 #ifndef CVDSP_FILTERS_ONEPOLEFILTER_HPP
 #define CVDSP_FILTERS_ONEPOLEFILTER_HPP
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <type_traits>
@@ -204,7 +205,7 @@ public:
         assert(sampleRate > 0);
         m_sampleRate = sampleRate;
         m_initialized = true;
-        m_lp.reset();
+        reset();
     }
 
     /**
@@ -212,7 +213,7 @@ public:
      */
     inline void reset() noexcept
     {
-        m_lp.reset();
+        m_lpState = static_cast<value_type>(0);
     }
 
     /**
