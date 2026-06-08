@@ -13,6 +13,8 @@
  *
  * - Saturation/Waveshaper.hpp
  * - Core/DSPUtils.hpp
+ * - Filters/DCBlocker.hpp
+ * - Math/FastMath.hpp
  * - Math/Oversampling.hpp
  *
  * Optional:
@@ -25,6 +27,7 @@
  * - Even Harmonic Generation
  * - Asymmetrical Saturation
  * - Plate Voltage Control
+ * - DC Blocking
  * - Oversampling Processing
  * - Guitar Preamp Style Nonlinearity
  *
@@ -36,6 +39,8 @@
 
 #include "../Saturation/Waveshaper.hpp"
 #include "../Core/DSPUtils.hpp"
+#include "../Filters/DCBlocker.hpp"
+#include "../Math/FastMath.hpp"
 #include "../Math/Oversampling.hpp"
 
 namespace cvdsp
@@ -57,10 +62,18 @@ public:
         noexcept
     {
         sampleRate_ =
-            sampleRate;
+            DSPUtils::isFinite(sampleRate) && sampleRate > T(0)
+            ? sampleRate
+            : static_cast<T>(44100);
 
         oversampler_.prepare(
-            sampleRate);
+            sampleRate_);
+
+        dcBlocker_.prepare(
+            sampleRate_);
+
+        dcBlocker_.setCutoffHz(
+            static_cast<T>(20));
 
         reset();
     }
@@ -69,48 +82,72 @@ public:
         noexcept
     {
         oversampler_.reset();
+
+        dcBlocker_.reset();
     }
 
     void setDrive(
         T drive)
         noexcept
     {
+        if (!DSPUtils::isFinite(drive))
+        {
+            drive = T(0);
+        }
+
         drive_ =
-            drive < T(0)
-            ? T(0)
-            : drive;
+            DSPUtils::clamp(
+                drive,
+                T(0),
+                kMaxDrive);
     }
 
     void setBias(
         T bias)
         noexcept
     {
-        bias_ = bias;
+        if (!DSPUtils::isFinite(bias))
+        {
+            bias = T(0);
+        }
+
+        bias_ =
+            DSPUtils::clamp(
+                bias,
+                -kMaxBias,
+                kMaxBias);
     }
 
     void setPlateVoltage(
         T voltage)
         noexcept
     {
-        if (voltage < T(50))
+        if (!DSPUtils::isFinite(voltage))
         {
-            voltage = T(50);
-        }
-
-        if (voltage > T(500))
-        {
-            voltage = T(500);
+            voltage = kDefaultPlateVoltage;
         }
 
         plateVoltage_ =
-            voltage;
+            DSPUtils::clamp(
+                voltage,
+                kMinPlateVoltage,
+                kMaxPlateVoltage);
     }
 
     void setOutputGain(
         T gain)
         noexcept
     {
-        outputGain_ = gain;
+        if (!DSPUtils::isFinite(gain))
+        {
+            gain = T(1);
+        }
+
+        outputGain_ =
+            DSPUtils::clamp(
+                gain,
+                T(0),
+                kMaxOutputGain);
     }
 
     [[nodiscard]]
@@ -141,6 +178,15 @@ public:
         T input)
         noexcept
     {
+        if (!DSPUtils::isFinite(input))
+        {
+            input = T(0);
+        }
+
+        input =
+            DSPUtils::killTiny(
+                input);
+
         const auto upsampled =
             oversampler_.processUp(
                 input);
@@ -161,9 +207,11 @@ public:
         }
 
         return
-            oversampler_
-                .processDown(
-                    processed);
+            DSPUtils::killTiny(
+                dcBlocker_.process(
+                    oversampler_
+                        .processDown(
+                            processed)));
     }
 
 private:
@@ -216,7 +264,7 @@ private:
             shaped =
                 positive
                 *
-                std::tanh(
+                fastTanh(
                     x
                     /
                     plateFactor);
@@ -226,7 +274,7 @@ private:
             shaped =
                 negative
                 *
-                std::tanh(
+                fastTanh(
                     x
                     /
                     plateFactor);
@@ -260,23 +308,32 @@ private:
                 shaped,
                 WaveshaperMode::Tanh);
 
-        /**
-         * Remove DC shift
-         * introduced by asymmetry.
-         */
-
-        shaped -=
-            static_cast<T>(0.15)
-            *
-            bias_;
-
         return
-            shaped
-            *
-            outputGain_;
+            DSPUtils::killTiny(
+                shaped
+                *
+                outputGain_);
     }
 
 private:
+
+    static constexpr T kMaxDrive =
+        static_cast<T>(64);
+
+    static constexpr T kMaxBias =
+        static_cast<T>(4);
+
+    static constexpr T kMinPlateVoltage =
+        static_cast<T>(50);
+
+    static constexpr T kDefaultPlateVoltage =
+        static_cast<T>(250);
+
+    static constexpr T kMaxPlateVoltage =
+        static_cast<T>(500);
+
+    static constexpr T kMaxOutputGain =
+        static_cast<T>(10);
 
     T sampleRate_ =
         static_cast<T>(44100);
@@ -288,7 +345,7 @@ private:
         static_cast<T>(0);
 
     T plateVoltage_ =
-        static_cast<T>(250);
+        kDefaultPlateVoltage;
 
     T outputGain_ =
         static_cast<T>(1);
@@ -297,6 +354,8 @@ private:
         T,
         4>
         oversampler_;
+
+    filters::DCBlocker<T> dcBlocker_;
 };
 
 using TriodeStageF =

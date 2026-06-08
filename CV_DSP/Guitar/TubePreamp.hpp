@@ -12,6 +12,7 @@
  * Dependencies:
  *
  * - Guitar/TriodeStage.hpp
+ * - Core/DSPUtils.hpp
  * - Core/ParameterSmoother.hpp
  *
  * Optional:
@@ -37,6 +38,7 @@
 #include <type_traits>
 
 #include "TriodeStage.hpp"
+#include "../Core/DSPUtils.hpp"
 #include "../Core/ParameterSmoother.hpp"
 
 namespace cvdsp
@@ -63,20 +65,30 @@ public:
         noexcept
     {
         sampleRate_ =
-            sampleRate;
+            DSPUtils::isFinite(sampleRate) && sampleRate > T(0)
+            ? sampleRate
+            : static_cast<T>(44100);
 
         for (auto& stage : stages_)
         {
             stage.prepare(
-                sampleRate);
+                sampleRate_);
         }
 
         driveSmoother_.prepare(
-            sampleRate,
+            sampleRate_,
+            static_cast<T>(0.02));
+
+        biasSmoother_.prepare(
+            sampleRate_,
+            static_cast<T>(0.02));
+
+        plateVoltageSmoother_.prepare(
+            sampleRate_,
             static_cast<T>(0.02));
 
         outputSmoother_.prepare(
-            sampleRate,
+            sampleRate_,
             static_cast<T>(0.02));
 
         reset();
@@ -92,6 +104,12 @@ public:
 
         driveSmoother_.reset(
             drive_);
+
+        biasSmoother_.reset(
+            bias_);
+
+        plateVoltageSmoother_.reset(
+            plateVoltage_);
 
         outputSmoother_.reset(
             outputGain_);
@@ -118,35 +136,76 @@ public:
         T drive)
         noexcept
     {
-        drive_ = drive;
+        if (!DSPUtils::isFinite(drive))
+        {
+            drive = T(0);
+        }
+
+        drive_ =
+            DSPUtils::clamp(
+                drive,
+                T(0),
+                kMaxDrive);
 
         driveSmoother_.setTarget(
-            drive);
+            drive_);
     }
 
     void setBias(
         T bias)
         noexcept
     {
-        bias_ = bias;
+        if (!DSPUtils::isFinite(bias))
+        {
+            bias = T(0);
+        }
+
+        bias_ =
+            DSPUtils::clamp(
+                bias,
+                -kMaxBias,
+                kMaxBias);
+
+        biasSmoother_.setTarget(
+            bias_);
     }
 
     void setPlateVoltage(
         T voltage)
         noexcept
     {
+        if (!DSPUtils::isFinite(voltage))
+        {
+            voltage = kDefaultPlateVoltage;
+        }
+
         plateVoltage_ =
-            voltage;
+            DSPUtils::clamp(
+                voltage,
+                kMinPlateVoltage,
+                kMaxPlateVoltage);
+
+        plateVoltageSmoother_.setTarget(
+            plateVoltage_);
     }
 
     void setOutputGain(
         T gain)
         noexcept
     {
-        outputGain_ = gain;
+        if (!DSPUtils::isFinite(gain))
+        {
+            gain = T(1);
+        }
+
+        outputGain_ =
+            DSPUtils::clamp(
+                gain,
+                T(0),
+                kMaxOutputGain);
 
         outputSmoother_.setTarget(
-            gain);
+            outputGain_);
     }
 
     [[nodiscard]]
@@ -191,10 +250,23 @@ public:
         const T drive =
             driveSmoother_.process();
 
+        const T bias =
+            biasSmoother_.process();
+
+        const T plateVoltage =
+            plateVoltageSmoother_.process();
+
         const T output =
             outputSmoother_.process();
 
-        T x = input;
+        if (!DSPUtils::isFinite(input))
+        {
+            input = T(0);
+        }
+
+        T x =
+            DSPUtils::killTiny(
+                input);
 
         for (std::size_t i = 0;
              i < numStages_;
@@ -209,20 +281,30 @@ public:
                 stageDrive);
 
             stages_[i].setBias(
-                bias_);
+                bias);
 
             stages_[i].setPlateVoltage(
-                plateVoltage_);
+                plateVoltage);
 
             stages_[i].setOutputGain(
-                static_cast<T>(1));
+                computeStageOutputGain(
+                    i));
 
             x =
                 stages_[i].process(
                     x);
         }
 
-        return x * output;
+        x *= output;
+
+        if (!DSPUtils::isFinite(x))
+        {
+            return T(0);
+        }
+
+        return
+            DSPUtils::killTiny(
+                x);
     }
 
 private:
@@ -262,7 +344,50 @@ private:
         }
     }
 
+    T computeStageOutputGain(
+        std::size_t stage)
+        const noexcept
+    {
+        if (stage + 1 >= numStages_)
+        {
+            return T(1);
+        }
+
+        switch (stage)
+        {
+            case 0:
+                return static_cast<T>(0.85);
+
+            case 1:
+                return static_cast<T>(0.80);
+
+            case 2:
+                return static_cast<T>(0.75);
+
+            default:
+                return T(1);
+        }
+    }
+
 private:
+
+    static constexpr T kMaxDrive =
+        static_cast<T>(64);
+
+    static constexpr T kMaxBias =
+        static_cast<T>(4);
+
+    static constexpr T kMinPlateVoltage =
+        static_cast<T>(50);
+
+    static constexpr T kDefaultPlateVoltage =
+        static_cast<T>(250);
+
+    static constexpr T kMaxPlateVoltage =
+        static_cast<T>(500);
+
+    static constexpr T kMaxOutputGain =
+        static_cast<T>(10);
 
     T sampleRate_ =
         static_cast<T>(44100);
@@ -276,7 +401,7 @@ private:
         static_cast<T>(0);
 
     T plateVoltage_ =
-        static_cast<T>(250);
+        kDefaultPlateVoltage;
 
     T outputGain_ =
         static_cast<T>(1);
@@ -288,6 +413,12 @@ private:
 
     OnePoleSmoother<T>
         driveSmoother_;
+
+    OnePoleSmoother<T>
+        biasSmoother_;
+
+    OnePoleSmoother<T>
+        plateVoltageSmoother_;
 
     OnePoleSmoother<T>
         outputSmoother_;
