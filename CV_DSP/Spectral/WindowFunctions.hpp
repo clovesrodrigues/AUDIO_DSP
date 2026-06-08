@@ -26,9 +26,8 @@
 #include <cmath>
 #include <type_traits>
 
-#include "FFT.hpp"
 
-namespace cvdsp
+namespace cvdsp::spectral
 {
 
 /**
@@ -397,6 +396,14 @@ private:
     }
 };
 
+} // namespace cvdsp::spectral
+
+namespace cvdsp
+{
+using WindowType = spectral::WindowType;
+
+template<typename T, std::size_t N>
+using WindowFunctions = spectral::WindowFunctions<T, N>;
 } // namespace cvdsp
 
 #endif

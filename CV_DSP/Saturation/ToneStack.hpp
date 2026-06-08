@@ -31,7 +31,7 @@
 
 #include "../Filters/Biquad.hpp"
 
-namespace cvdsp
+namespace cvdsp::saturation
 {
 
 template<typename T>
@@ -151,7 +151,7 @@ protected:
     }
 
     static void configurePeak(
-        filters::Biquad<T>& filter,
+        cvdsp::filters::Biquad<T>& filter,
         T frequencyHz,
         T q,
         T gainDb) noexcept
@@ -172,7 +172,7 @@ protected:
     }
 
     static void configureLowShelf(
-        filters::Biquad<T>& filter,
+        cvdsp::filters::Biquad<T>& filter,
         T frequencyHz,
         T q,
         T gainDb) noexcept
@@ -193,7 +193,7 @@ protected:
     }
 
     static void configureHighShelf(
-        filters::Biquad<T>& filter,
+        cvdsp::filters::Biquad<T>& filter,
         T frequencyHz,
         T q,
         T gainDb) noexcept
@@ -234,16 +234,16 @@ protected:
      * Reutilizados pelas implementações derivadas.
      */
 
-    filters::Biquad<T>
+    cvdsp::filters::Biquad<T>
         bassFilter_;
 
-    filters::Biquad<T>
+    cvdsp::filters::Biquad<T>
         midFilter_;
 
-    filters::Biquad<T>
+    cvdsp::filters::Biquad<T>
         trebleFilter_;
 
-    filters::Biquad<T>
+    cvdsp::filters::Biquad<T>
         presenceFilter_;
 };
 
@@ -253,6 +253,15 @@ using ToneStackF =
 using ToneStackD =
     ToneStack<double>;
 
+} // namespace cvdsp::saturation
+
+namespace cvdsp
+{
+template<typename T>
+using ToneStack = saturation::ToneStack<T>;
+
+using ToneStackF = saturation::ToneStackF;
+using ToneStackD = saturation::ToneStackD;
 } // namespace cvdsp
 
 #endif

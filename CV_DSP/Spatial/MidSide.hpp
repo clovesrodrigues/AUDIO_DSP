@@ -16,10 +16,9 @@
  * - Mastering Support
  */
 
-#include <cmath>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::spatial
 {
 
 /**
@@ -137,6 +136,12 @@ public:
     }
 };
 
+} // namespace cvdsp::spatial
+
+namespace cvdsp
+{
+template<typename T>
+using MidSide = spatial::MidSide<T>;
 } // namespace cvdsp
 
 #endif

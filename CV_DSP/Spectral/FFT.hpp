@@ -32,14 +32,11 @@
 #include <array>
 #include <complex>
 #include <cstddef>
-#include <cstdint>
 #include <type_traits>
 #include <cmath>
 
-#include "../Core/Constants.hpp"
-#include "../Math/FastMath.hpp"
 
-namespace cvdsp
+namespace cvdsp::spectral
 {
 
 template<typename T>
@@ -349,6 +346,15 @@ private:
 using FFTf = FFT<float>;
 using FFTd = FFT<double>;
 
+} // namespace cvdsp::spectral
+
+namespace cvdsp
+{
+template<typename T>
+using FFT = spectral::FFT<T>;
+
+using FFTf = spectral::FFTf;
+using FFTd = spectral::FFTd;
 } // namespace cvdsp
 
 #endif

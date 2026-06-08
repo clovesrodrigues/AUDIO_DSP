@@ -21,7 +21,7 @@
 #include <cmath>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::saturation
 {
 
 /**
@@ -228,6 +228,12 @@ private:
         static_cast<T>(0);
 };
 
+} // namespace cvdsp::saturation
+
+namespace cvdsp
+{
+template<typename T>
+using TubeSaturation = saturation::TubeSaturation<T>;
 } // namespace cvdsp
 
 #endif

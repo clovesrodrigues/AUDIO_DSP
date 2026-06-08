@@ -40,7 +40,7 @@
 #include "WindowFunctions.hpp"
 #include "../Core/CircularBuffer.hpp"
 
-namespace cvdsp
+namespace cvdsp::spectral
 {
 
 enum class STFTMode
@@ -449,6 +449,25 @@ using STFT4096D =
 using STFT8192D =
     STFT<double, 8192>;
 
+} // namespace cvdsp::spectral
+
+namespace cvdsp
+{
+using STFTMode = spectral::STFTMode;
+
+template<typename T, std::size_t FFTSize, std::size_t OverlapPercent = 50>
+using STFT = spectral::STFT<T, FFTSize, OverlapPercent>;
+
+using STFT512F = spectral::STFT512F;
+using STFT1024F = spectral::STFT1024F;
+using STFT2048F = spectral::STFT2048F;
+using STFT4096F = spectral::STFT4096F;
+using STFT8192F = spectral::STFT8192F;
+using STFT512D = spectral::STFT512D;
+using STFT1024D = spectral::STFT1024D;
+using STFT2048D = spectral::STFT2048D;
+using STFT4096D = spectral::STFT4096D;
+using STFT8192D = spectral::STFT8192D;
 } // namespace cvdsp
 
 #endif

@@ -23,7 +23,7 @@
 #include <cmath>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::saturation
 {
 
 /**
@@ -272,6 +272,12 @@ private:
         static_cast<T>(1.15);
 };
 
+} // namespace cvdsp::saturation
+
+namespace cvdsp
+{
+template<typename T>
+using TapeSaturation = saturation::TapeSaturation<T>;
 } // namespace cvdsp
 
 #endif

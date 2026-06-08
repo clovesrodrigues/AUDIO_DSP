@@ -23,9 +23,8 @@
 
 #include "FFT.hpp"
 #include "WindowFunctions.hpp"
-#include "STFT.hpp"
 
-namespace cvdsp
+namespace cvdsp::spectral
 {
 
 template<
@@ -403,6 +402,23 @@ using SpectrumAnalyzer4096D =
 using SpectrumAnalyzer8192D =
     SpectrumAnalyzer<double, 8192>;
 
+} // namespace cvdsp::spectral
+
+namespace cvdsp
+{
+template<typename T, std::size_t FFTSize>
+using SpectrumAnalyzer = spectral::SpectrumAnalyzer<T, FFTSize>;
+
+using SpectrumAnalyzer512F = spectral::SpectrumAnalyzer512F;
+using SpectrumAnalyzer1024F = spectral::SpectrumAnalyzer1024F;
+using SpectrumAnalyzer2048F = spectral::SpectrumAnalyzer2048F;
+using SpectrumAnalyzer4096F = spectral::SpectrumAnalyzer4096F;
+using SpectrumAnalyzer8192F = spectral::SpectrumAnalyzer8192F;
+using SpectrumAnalyzer512D = spectral::SpectrumAnalyzer512D;
+using SpectrumAnalyzer1024D = spectral::SpectrumAnalyzer1024D;
+using SpectrumAnalyzer2048D = spectral::SpectrumAnalyzer2048D;
+using SpectrumAnalyzer4096D = spectral::SpectrumAnalyzer4096D;
+using SpectrumAnalyzer8192D = spectral::SpectrumAnalyzer8192D;
 } // namespace cvdsp
 
 #endif

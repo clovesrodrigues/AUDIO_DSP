@@ -15,7 +15,7 @@
 #include <numbers>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::saturation
 {
 
 /**
@@ -226,6 +226,14 @@ private:
     }
 };
 
+} // namespace cvdsp::saturation
+
+namespace cvdsp
+{
+template<typename T>
+using Waveshaper = saturation::Waveshaper<T>;
+
+using WaveshaperMode = saturation::WaveshaperMode;
 } // namespace cvdsp
 
 #endif

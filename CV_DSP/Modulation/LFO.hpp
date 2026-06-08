@@ -15,7 +15,7 @@
 #include <cmath>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::modulation
 {
 
 /**
@@ -317,6 +317,14 @@ private:
         LFOWaveform::Sine;
 };
 
+} // namespace cvdsp::modulation
+
+namespace cvdsp
+{
+template<typename T>
+using LFO = modulation::LFO<T>;
+
+using LFOWaveform = modulation::LFOWaveform;
 } // namespace cvdsp
 
 #endif
