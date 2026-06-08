@@ -715,6 +715,19 @@ public:
     }
 
     /**
+     * @brief Prepara a delay line mantendo compatibilidade com módulos que
+     *        informam também um limite máximo em milissegundos.
+     *
+     * O armazenamento máximo continua definido pelo parâmetro de template
+     * MaxDelaySamples; maxDelayMilliseconds é validado indiretamente pelos
+     * setters de delay, que fazem clamp para a capacidade real do buffer.
+     */
+    void prepare(size_type sampleRate, value_type /*maxDelayMilliseconds*/) noexcept
+    {
+        prepare(sampleRate);
+    }
+
+    /**
      * @brief Reseta o estado do buffer sem reconfiguração.
      * 
      * **Operações**:
