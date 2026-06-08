@@ -12,10 +12,9 @@
  */
 
 #include <algorithm>
-#include <cmath>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::modulation
 {
 
 /**
@@ -399,6 +398,14 @@ private:
         ADSRState::Idle;
 };
 
+} // namespace cvdsp::modulation
+
+namespace cvdsp
+{
+template<typename T>
+using ADSR = modulation::ADSR<T>;
+
+using ADSRState = modulation::ADSRState;
 } // namespace cvdsp
 
 #endif

@@ -12,11 +12,10 @@
  */
 
 #include <cmath>
-#include <cstdint>
 #include <type_traits>
 #include <algorithm>
 
-namespace cvdsp
+namespace cvdsp::modulation
 {
 
 /**
@@ -275,6 +274,14 @@ private:
         OscillatorWaveform::Sine;
 };
 
+} // namespace cvdsp::modulation
+
+namespace cvdsp
+{
+template<typename T>
+using Oscillator = modulation::Oscillator<T>;
+
+using OscillatorWaveform = modulation::OscillatorWaveform;
 } // namespace cvdsp
 
 #endif

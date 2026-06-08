@@ -18,7 +18,7 @@
 
 #include "MidSide.hpp"
 
-namespace cvdsp
+namespace cvdsp::spatial
 {
 
 /**
@@ -133,6 +133,12 @@ public:
     }
 };
 
+} // namespace cvdsp::spatial
+
+namespace cvdsp
+{
+template<typename T>
+using StereoWidth = spatial::StereoWidth<T>;
 } // namespace cvdsp
 
 #endif

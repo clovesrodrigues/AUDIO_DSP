@@ -22,7 +22,7 @@
 #include <numbers>
 #include <type_traits>
 
-namespace cvdsp
+namespace cvdsp::filters
 {
 
 /**
@@ -338,6 +338,14 @@ private:
         SVFMode::LowPass;
 };
 
+} // namespace cvdsp::filters
+
+namespace cvdsp
+{
+using SVFMode = filters::SVFMode;
+
+template<typename T>
+using StateVariableFilter = filters::StateVariableFilter<T>;
 } // namespace cvdsp
 
 #endif

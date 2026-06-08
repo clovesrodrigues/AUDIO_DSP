@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <type_traits>
 #include <algorithm>
 #include <cassert>
@@ -49,7 +51,7 @@ namespace cvdsp::delay
  * Define qual algoritmo de interpolação será utilizado durante o processamento
  * para melhorar a qualidade do delay fracionário.
  */
-enum class InterpolationType : uint8_t
+enum class InterpolationType : std::uint8_t
 {
     /// Sem interpolação (delay inteiro apenas)
     /// Latência: 0 amostras
@@ -1139,6 +1141,50 @@ public:
     // =========================================================================
 
     /**
+     * @brief Lê uma amostra atrasada por um número explícito de amostras.
+     *
+     * Este método separa leitura e escrita para blocos como all-pass, chorus e
+     * flanger que precisam calcular feedback antes de gravar a próxima amostra.
+     */
+    [[nodiscard]]
+    inline value_type readSamples(value_type delayInSamples) const noexcept
+    {
+        return readDelaySamples(delayInSamples);
+    }
+
+    /**
+     * @brief Lê uma amostra atrasada por um número inteiro de amostras.
+     *
+     * Nome separado evita ambiguidade com literais inteiros em readSamples().
+     */
+    [[nodiscard]]
+    inline value_type readIntegerSamples(size_type delayInSamples) const noexcept
+    {
+        return readDelaySamples(static_cast<value_type>(delayInSamples));
+    }
+
+    /**
+     * @brief Lê uma amostra atrasada por milissegundos, usando interpolação.
+     */
+    [[nodiscard]]
+    inline value_type readInterpolated(value_type delayInMilliseconds) const noexcept
+    {
+        const value_type delayInSamples =
+            delayInMilliseconds * static_cast<value_type>(m_sampleRate) / static_cast<value_type>(1000);
+
+        return readDelaySamples(delayInSamples);
+    }
+
+    /**
+     * @brief Escreve uma amostra e avança o cursor circular.
+     */
+    inline void write(value_type inputSample) noexcept
+    {
+        m_buffer[m_writeIndex] = inputSample;
+        m_writeIndex = (m_writeIndex + 1) & MODULO_MASK;
+    }
+
+    /**
      * @brief Retorna o delay atual em amostras.
      * 
      * **Complexidade**: O(1)
@@ -1225,6 +1271,66 @@ public:
     static constexpr InterpolationType getInterpolationType() noexcept
     {
         return INTERPOLATION_TYPE;
+    }
+
+private:
+
+    [[nodiscard]]
+    inline value_type readDelaySamples(value_type delayInSamples) const noexcept
+    {
+        const value_type clampedDelay = std::clamp(delayInSamples,
+                                                  static_cast<value_type>(0),
+                                                  static_cast<value_type>(MaxDelaySamples));
+
+        if constexpr (Interpolation == InterpolationType::None)
+        {
+            const size_type delayInt = static_cast<size_type>(clampedDelay);
+            const size_type readIndex = (m_writeIndex + MaxDelaySamples - delayInt) & MODULO_MASK;
+            return m_buffer[readIndex];
+        }
+        else if constexpr (Interpolation == InterpolationType::Linear)
+        {
+            const value_type delayFrac = clampedDelay - std::floor(clampedDelay);
+            const size_type delayInt = static_cast<size_type>(clampedDelay);
+            const size_type readIndex0 = (m_writeIndex + MaxDelaySamples - delayInt) & MODULO_MASK;
+            const size_type readIndex1 = (readIndex0 + MaxDelaySamples - 1) & MODULO_MASK;
+
+            const value_type sample0 = m_buffer[readIndex0];
+            const value_type sample1 = m_buffer[readIndex1];
+
+            return sample0 + delayFrac * (sample1 - sample0);
+        }
+        else
+        {
+            const value_type t = clampedDelay - std::floor(clampedDelay);
+            const size_type delayInt = static_cast<size_type>(clampedDelay);
+
+            const size_type idx0 = (m_writeIndex + MaxDelaySamples - delayInt + 1) & MODULO_MASK;
+            const size_type idx1 = (m_writeIndex + MaxDelaySamples - delayInt) & MODULO_MASK;
+            const size_type idx2 = (idx1 + MaxDelaySamples - 1) & MODULO_MASK;
+            const size_type idx3 = (idx1 + MaxDelaySamples - 2) & MODULO_MASK;
+
+            const value_type y0 = m_buffer[idx0];
+            const value_type y1 = m_buffer[idx1];
+            const value_type y2 = m_buffer[idx2];
+            const value_type y3 = m_buffer[idx3];
+
+            const value_type m0 = (y2 - y1) * static_cast<value_type>(0.5);
+            const value_type m1 = (y3 - y0) * static_cast<value_type>(0.5);
+
+            const value_type t2 = t * t;
+            const value_type t3 = t2 * t;
+
+            const value_type h00 = static_cast<value_type>(2.0) * t3 -
+                                   static_cast<value_type>(3.0) * t2 +
+                                   static_cast<value_type>(1.0);
+            const value_type h10 = t3 - static_cast<value_type>(2.0) * t2 + t;
+            const value_type h01 = -static_cast<value_type>(2.0) * t3 +
+                                   static_cast<value_type>(3.0) * t2;
+            const value_type h11 = t3 - t2;
+
+            return h00 * y0 + h10 * m0 + h01 * y1 + h11 * m1;
+        }
     }
 
 private:

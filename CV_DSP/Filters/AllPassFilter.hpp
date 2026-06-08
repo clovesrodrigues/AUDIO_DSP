@@ -22,7 +22,7 @@
 
 #include "../Delay/DelayLine.hpp"
 
-namespace cvdsp
+namespace cvdsp::filters
 {
 
 /**
@@ -72,12 +72,13 @@ public:
                 static_cast<T>(1));
 
         maxDelaySamples_ =
-            std::max<std::size_t>(
+            std::clamp<std::size_t>(
                 maxDelaySamples,
-                1u);
+                1u,
+                delay::DelayLine<T>::getMaxDelaySamples());
 
-        delay_.prepareSamples(
-            maxDelaySamples_);
+        delay_.prepare(
+            static_cast<typename delay::DelayLine<T>::size_type>(sampleRate_));
 
         reset();
     }
@@ -145,7 +146,7 @@ public:
         T input) noexcept
     {
         const T delayed =
-            delay_.readSamples(
+            delay_.readIntegerSamples(
                 delaySamples_);
 
         const T output =
@@ -170,7 +171,7 @@ public:
 
 private:
 
-    DelayLine<T> delay_;
+    delay::DelayLine<T> delay_;
 
     T sampleRate_ =
         static_cast<T>(44100);
@@ -185,6 +186,12 @@ private:
         1;
 };
 
+} // namespace cvdsp::filters
+
+namespace cvdsp
+{
+template<typename T>
+using AllPassFilter = filters::AllPassFilter<T>;
 } // namespace cvdsp
 
 #endif

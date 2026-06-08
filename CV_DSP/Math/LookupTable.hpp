@@ -123,6 +123,12 @@ CVDSP_NODISCARD CVDSP_FORCE_INLINE T tanhValue(T value) noexcept
 template <typename T, LookupTableFunction Function, std::size_t Points>
 class LookupTable
 {
+    static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
+                  "CV_DSP lookup tables require float or double scalar types.");
+
+    static_assert(Points == 4096U || Points == 8192U || Points == 16384U || Points == 32768U,
+                  "CV_DSP lookup table capacity must be 4096, 8192, 16384, or 32768 points.");
+
 public:
     using Scalar = T;
 
