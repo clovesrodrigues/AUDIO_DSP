@@ -141,11 +141,12 @@ public:
         T input)
         noexcept
     {
-        oversampler_.processUp(
-            input);
+        const auto upsampled =
+            oversampler_.processUp(
+                input);
 
-        T accumulated =
-            T(0);
+        typename Oversampling<T, 4>::OversampledBlock
+            processed{};
 
         constexpr std::size_t factor =
             4;
@@ -154,20 +155,15 @@ public:
              i < factor;
              ++i)
         {
-            accumulated +=
+            processed[i] =
                 processTriode(
-                    oversampler_
-                        .getUpsampledSample(
-                            i));
+                    upsampled[i]);
         }
 
         return
             oversampler_
                 .processDown(
-                    accumulated
-                    /
-                    static_cast<T>(
-                        factor));
+                    processed);
     }
 
 private:

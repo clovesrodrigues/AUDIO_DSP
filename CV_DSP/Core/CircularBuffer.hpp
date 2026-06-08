@@ -2,6 +2,7 @@
 #define CVDSP_CORE_CIRCULARBUFFER_HPP
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
@@ -569,6 +570,21 @@ public:
         // Equivalente a: head = (head + 1) % Capacity
         // Mas muito mais eficiente (uma operação bitwise!)
         m_head = (m_head + 1) & MODULO_MASK;
+    }
+
+    /**
+     * @brief Escreve uma amostra na posição atual e avança o head.
+     *
+     * Conveniência real-time safe para delay lines e motores de convolução que
+     * precisam inserir uma amostra por chamada de processamento. Equivale a
+     * write(0, value) seguido de advance().
+     *
+     * @param value Amostra a inserir.
+     */
+    inline void push(value_type value) noexcept
+    {
+        write(0, value);
+        advance();
     }
 
     /**
