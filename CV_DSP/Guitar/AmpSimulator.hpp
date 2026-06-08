@@ -158,7 +158,8 @@ public:
             sampleRate_);
 
         const bool cabinetPrepared =
-            cabinet_.prepare();
+            cabinet_.prepare(
+                sampleRate_);
 
         reset();
 
