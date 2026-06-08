@@ -196,7 +196,7 @@ public:
 
 private:
 
-    DelayLine<T> delay_;
+    delay::DelayLine<T> delay_;
 
     LFO<T> lfo_;
 
