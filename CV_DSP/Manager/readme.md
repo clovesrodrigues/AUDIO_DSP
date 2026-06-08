@@ -676,6 +676,180 @@ Com `persistentOnly = true`, apenas parâmetros com `ParameterFlag::Persistent` 
 
 ### Aplicar snapshot
 
+1. ParameterDescriptor
+
+Não guarda valor.
+
+Não guarda automação.
+
+Não guarda estado.
+
+Ele apenas descreve o parâmetro.
+
+Exemplo:
+
+Cutoff
+
+Descriptor:
+
+ID = 1001
+
+Nome = "Cutoff"
+
+Unidade = "Hz"
+
+Min = 20
+
+Max = 20000
+
+Default = 1000
+
+Escala = Logarithmic
+
+Ele é imutável.
+
+Você cria uma vez.
+
+Analogia:
+
+Ficha técnica do parâmetro.
+2. ParameterState
+
+Agora entra o estado vivo.
+
+Por exemplo:
+
+Cutoff
+
+Descriptor diz:
+
+20Hz -> 20000Hz
+
+Mas o valor atual muda.
+
+Current = 1000Hz
+
+Target = 5000Hz
+
+Normalized = 0.74
+
+Talvez também:
+
+LinearSmoother
+
+ou
+
+ExponentialSmoother
+
+Analogia:
+
+É o coração batendo.
+
+O descriptor é a identidade.
+
+O state é o estado atual.
+
+3. ParameterManager
+
+Esse é o cara que o Codex chama de:
+
+orquestrador
+
+Porque ele gerencia todos os parâmetros.
+
+Imagine um plugin com:
+
+Gain
+Mix
+Threshold
+Attack
+Release
+Cutoff
+Resonance
+Drive
+
+Você terá:
+
+8 ParameterDescriptor
+
+e
+
+8 ParameterState
+
+O Manager controla tudo.
+
+Visualmente:
+
+ParameterManager
+
+├── Gain
+│   ├── Descriptor
+│   └── State
+│
+├── Mix
+│   ├── Descriptor
+│   └── State
+│
+├── Threshold
+│   ├── Descriptor
+│   └── State
+│
+└── ...
+O que ele faz na prática?
+Registro
+
+Na inicialização:
+
+manager.registerParameter(
+    cutoffDescriptor
+);
+
+manager.registerParameter(
+    resonanceDescriptor
+);
+Lookup
+
+Quando o DSP precisa:
+
+cutoff = manager.getValue(kCutoff);
+Automação
+
+VST3 envia:
+
+Cutoff = 0.82
+sampleOffset = 123
+
+Manager recebe:
+
+manager.enqueueAutomation(
+    cutoff,
+    0.82,
+    123
+);
+Sample Accurate
+
+Chega no sample:
+
+123
+
+Manager faz:
+
+cutoffState.setTarget(...)
+
+e começa a rampa.
+
+Snapshot
+
+Quando salvar preset:
+
+manager.createSnapshot();
+
+Resultado:
+
+Cutoff = 5342 Hz
+Resonance = 0.72
+Drive = 0.34
+
 ```cpp
 parameters.applySnapshot(snapshot);
 ```
