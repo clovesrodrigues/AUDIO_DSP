@@ -3,6 +3,14 @@
 #include "pluginterfaces/base/fstrdefs.h"
 #include "CV_GUI/vst3/VST3ParameterBridge.hpp"
 
+#include "public.sdk/vst/vsteditcontroller.h"
+#include "imgui.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <string>
+
 #if SMTG_OS_WINDOWS
 #include "CV_GUI/imgui/ImGuiLayer.hpp"
 #include "CV_GUI/platform/win32/Win32ChildWindow.hpp"
@@ -16,6 +24,171 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler (HWND hwnd, UINT ms
 namespace CV::GUI {
 namespace {
 constexpr unsigned int kRenderIntervalMs = 33;
+
+std::string vstStringToUtf8 (const Steinberg::Vst::TChar* text)
+{
+    std::string result;
+    if (!text)
+        return result;
+
+    for (auto cursor = text; *cursor != 0; ++cursor)
+    {
+        const auto codepoint = static_cast<unsigned int> (*cursor);
+        if (codepoint < 0x80)
+        {
+            result.push_back (static_cast<char> (codepoint));
+        }
+        else if (codepoint < 0x800)
+        {
+            result.push_back (static_cast<char> (0xC0 | (codepoint >> 6)));
+            result.push_back (static_cast<char> (0x80 | (codepoint & 0x3F)));
+        }
+        else
+        {
+            result.push_back (static_cast<char> (0xE0 | (codepoint >> 12)));
+            result.push_back (static_cast<char> (0x80 | ((codepoint >> 6) & 0x3F)));
+            result.push_back (static_cast<char> (0x80 | (codepoint & 0x3F)));
+        }
+    }
+    return result;
+}
+
+std::string paramValueToString (Steinberg::Vst::EditController& controller,
+                                Steinberg::Vst::ParamID paramID,
+                                Steinberg::Vst::ParamValue normalizedValue)
+{
+    Steinberg::Vst::String128 valueText {};
+    if (controller.getParamStringByValue (paramID, normalizedValue, valueText) == Steinberg::kResultTrue)
+        return vstStringToUtf8 (valueText);
+
+    char fallback[32] {};
+    std::snprintf (fallback, sizeof (fallback), "%.3f", normalizedValue);
+    return fallback;
+}
+
+void applyParameterGesture (VST3::VST3ParameterBridge& bridge,
+                            Steinberg::Vst::ParamID paramID,
+                            Steinberg::Vst::ParamValue normalizedValue)
+{
+    normalizedValue = std::clamp (normalizedValue, 0.0, 1.0);
+    const auto beginResult = bridge.beginGesture (paramID);
+    if (beginResult == Steinberg::kResultTrue || beginResult == Steinberg::kResultOk)
+    {
+        bridge.updateGesture (paramID, normalizedValue);
+        bridge.endGesture (paramID);
+    }
+}
+
+void drawParameterControl (Steinberg::Vst::EditController& controller,
+                           VST3::VST3ParameterBridge& bridge,
+                           const Steinberg::Vst::ParameterInfo& info)
+{
+    if ((info.flags & Steinberg::Vst::ParameterInfo::kIsHidden) != 0)
+        return;
+
+    Steinberg::Vst::ParamValue normalizedValue = 0.0;
+    if (!bridge.getParamNormalized (info.id, normalizedValue))
+        return;
+
+    const auto title = vstStringToUtf8 (info.title);
+    const auto units = vstStringToUtf8 (info.units);
+    const auto label = title + "##param_" + std::to_string (info.id);
+    const bool readOnly = (info.flags & Steinberg::Vst::ParameterInfo::kIsReadOnly) != 0;
+
+    if (readOnly)
+        ImGui::BeginDisabled ();
+
+    ImGui::PushID (static_cast<int> (info.id));
+
+    if (info.stepCount > 0)
+    {
+        const int stepCount = static_cast<int> (info.stepCount);
+        int currentStep = static_cast<int> (std::lround (std::clamp (normalizedValue, 0.0, 1.0) * stepCount));
+        currentStep = std::clamp (currentStep, 0, stepCount);
+        const auto preview = paramValueToString (controller, info.id, static_cast<double> (currentStep) / stepCount);
+
+        if (ImGui::BeginCombo (label.c_str (), preview.c_str ()))
+        {
+            for (int step = 0; step <= stepCount; ++step)
+            {
+                const auto candidateNormalized = static_cast<double> (step) / stepCount;
+                auto itemText = paramValueToString (controller, info.id, candidateNormalized);
+                if (itemText.empty ())
+                    itemText = std::to_string (step);
+
+                const bool selected = step == currentStep;
+                if (ImGui::Selectable (itemText.c_str (), selected) && !readOnly)
+                    applyParameterGesture (bridge, info.id, candidateNormalized);
+                if (selected)
+                    ImGui::SetItemDefaultFocus ();
+            }
+            ImGui::EndCombo ();
+        }
+    }
+    else
+    {
+        const double minPlain = controller.normalizedParamToPlain (info.id, 0.0);
+        const double maxPlain = controller.normalizedParamToPlain (info.id, 1.0);
+        double plainValue = controller.normalizedParamToPlain (info.id, normalizedValue);
+        char format[32] {};
+        std::snprintf (format, sizeof (format), "%%.2f%s%s", units.empty () ? "" : " ", units.c_str ());
+
+        if (ImGui::SliderScalar (label.c_str (), ImGuiDataType_Double, &plainValue, &minPlain, &maxPlain, format) && !readOnly)
+        {
+            bridge.updateGesture (info.id, controller.plainParamToNormalized (info.id, plainValue));
+        }
+
+        if (!readOnly && ImGui::IsItemActivated ())
+            bridge.beginGesture (info.id);
+        if (!readOnly && ImGui::IsItemDeactivatedAfterEdit ())
+            bridge.endGesture (info.id);
+    }
+
+    ImGui::SameLine ();
+    ImGui::TextUnformatted (paramValueToString (controller, info.id, normalizedValue).c_str ());
+
+    if (!readOnly)
+    {
+        ImGui::SameLine ();
+        if (ImGui::SmallButton ("Reset"))
+            applyParameterGesture (bridge, info.id, info.defaultNormalizedValue);
+    }
+
+    ImGui::PopID ();
+
+    if (readOnly)
+        ImGui::EndDisabled ();
+}
+
+void drawParameterEditor (VST3::VST3ParameterBridge& bridge)
+{
+    auto* controller = bridge.controller ();
+    if (!controller)
+    {
+        ImGui::TextUnformatted ("No VST3 EditController is attached to CV_GUI.");
+        return;
+    }
+
+    const int parameterCount = controller->getParameterCount ();
+    if (parameterCount <= 0)
+    {
+        ImGui::TextUnformatted ("No editable VST3 parameters were reported by the controller.");
+        return;
+    }
+
+    ImGui::TextUnformatted ("CV Compressor - Dear ImGui editor");
+    ImGui::Separator ();
+
+    for (int index = 0; index < parameterCount; ++index)
+    {
+        Steinberg::Vst::ParameterInfo info {};
+        if (controller->getParameterInfo (index, info) == Steinberg::kResultTrue)
+            drawParameterControl (*controller, bridge, info);
+    }
+
+    ImGui::Separator ();
+    ImGui::TextDisabled ("Automation: beginEdit / performEdit / endEdit via VST3ParameterBridge.");
+}
 
 #if SMTG_OS_WINDOWS
 bool isKeyboardMessage (UINT message)
@@ -282,7 +455,12 @@ void VST3ImGuiView::renderFrame ()
     ImGui_ImplWin32_NewFrame ();
     imguiRenderer_->newFrame ();
     imguiLayer_->beginFrame ();
-    imguiLayer_->drawDefaultView ();
+
+    ImGui::SetNextWindowPos (ImVec2 (16.0f, 16.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize (ImVec2 (620.0f, 360.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin ("CV Compressor");
+    drawParameterEditor (*parameterBridge_);
+    ImGui::End ();
 
     openGLContext_->prepareFrame (rect.getWidth (), rect.getHeight ());
     imguiRenderer_->renderDrawData (imguiLayer_->render ());
