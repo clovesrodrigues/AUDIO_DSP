@@ -84,5 +84,6 @@ if(WIN32)
             opengl32
             gdi32
             user32
+            dwmapi
     )
 endif()

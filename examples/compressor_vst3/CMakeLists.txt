@@ -57,16 +57,32 @@ set(vst3_sdk_sources
     ${vst3sdk_SOURCE_DIR}/pluginterfaces/base/coreiids.cpp
     ${vst3sdk_SOURCE_DIR}/pluginterfaces/base/funknown.cpp
     ${vst3sdk_SOURCE_DIR}/pluginterfaces/base/ustring.cpp
-    ${vst3sdk_SOURCE_DIR}/public.sdk/main/linuxmain.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/common/commoniids.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/main/moduleinit.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/main/pluginfactory.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/common/pluginview.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstinitiids.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstaudioeffect.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstbus.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstcomponent.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstcomponentbase.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vsteditcontroller.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstparameters.cpp
 )
+
+if(WIN32)
+    list(APPEND vst3_sdk_sources
+        ${vst3sdk_SOURCE_DIR}/public.sdk/main/dllmain.cpp
+    )
+elseif(APPLE)
+    list(APPEND vst3_sdk_sources
+        ${vst3sdk_SOURCE_DIR}/public.sdk/main/macmain.cpp
+    )
+else()
+    list(APPEND vst3_sdk_sources
+        ${vst3sdk_SOURCE_DIR}/public.sdk/main/linuxmain.cpp
+    )
+endif()
 
 if(compressor_vst3_enable_cv_gui)
     add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../CV_GUI ${PROJECT_BINARY_DIR}/CV_GUI)
@@ -101,6 +117,15 @@ target_compile_definitions(compressor_vst3
 
 if(compressor_vst3_enable_cv_gui)
     target_link_libraries(compressor_vst3 PRIVATE CV_GUI::cv_gui)
+endif()
+
+if(WIN32)
+    set_target_properties(compressor_vst3 PROPERTIES
+        PREFIX ""
+        OUTPUT_NAME "compressor_vst3"
+        SUFFIX ".vst3"
+        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-win"
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-win")
 endif()
 
 if(UNIX AND NOT APPLE)
