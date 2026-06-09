@@ -33,7 +33,9 @@ Nenhuma dependência externa é baixada.
 
 ## GUI
 
-Dear ImGui está presente em `backends/imgui`, porém o repositório não contém uma integração `IPlugView` VST3 pronta para renderizar ImGui dentro do editor do plugin. Por isso, o plugin retorna `nullptr` em `createView()` e usa o fallback nativo do host VST3: os parâmetros VST3 registrados no controller ficam disponíveis na interface genérica do host.
+O plugin agora integra a infraestrutura `CV_GUI` de forma condicional. Em plataformas com backend disponível (`WIN32`, usando child window Win32 + OpenGL3), `COMPRESSOR_VST3_ENABLE_CV_GUI` pode criar um editor Dear ImGui via `IPlugView`. Em plataformas sem backend CV_GUI disponível ou quando a opção estiver desativada, `createView()` retorna `nullptr` e preserva o fallback nativo do host VST3: os parâmetros registrados no controller ficam disponíveis na interface genérica da DAW.
+
+No Linux deste repositório, o fallback nativo é usado por padrão porque o backend CV_GUI implementado até agora é Win32/OpenGL3.
 
 ## Instruções de build
 

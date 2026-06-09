@@ -10,6 +10,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+option(COMPRESSOR_VST3_ENABLE_CV_GUI "Enable the CV_GUI Dear ImGui editor when the platform backend is available" ${WIN32})
+set(compressor_vst3_enable_cv_gui OFF)
+if(COMPRESSOR_VST3_ENABLE_CV_GUI AND WIN32)
+    set(compressor_vst3_enable_cv_gui ON)
+endif()
+
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../backends/vst3sdk" CACHE PATH "Path to the bundled VST3 SDK")
 if(NOT EXISTS "${vst3sdk_SOURCE_DIR}/pluginterfaces/base/funknown.h")
     message(FATAL_ERROR "Bundled VST3 SDK not found at ${vst3sdk_SOURCE_DIR}")
@@ -51,15 +57,36 @@ set(vst3_sdk_sources
     ${vst3sdk_SOURCE_DIR}/pluginterfaces/base/coreiids.cpp
     ${vst3sdk_SOURCE_DIR}/pluginterfaces/base/funknown.cpp
     ${vst3sdk_SOURCE_DIR}/pluginterfaces/base/ustring.cpp
-    ${vst3sdk_SOURCE_DIR}/public.sdk/main/linuxmain.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/common/commoniids.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/main/moduleinit.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/main/pluginfactory.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/common/pluginview.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstinitiids.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstaudioeffect.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstbus.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstcomponent.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstcomponentbase.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vsteditcontroller.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/vst/vstparameters.cpp
 )
+
+if(WIN32)
+    list(APPEND vst3_sdk_sources
+        ${vst3sdk_SOURCE_DIR}/public.sdk/main/dllmain.cpp
+    )
+elseif(APPLE)
+    list(APPEND vst3_sdk_sources
+        ${vst3sdk_SOURCE_DIR}/public.sdk/main/macmain.cpp
+    )
+else()
+    list(APPEND vst3_sdk_sources
+        ${vst3sdk_SOURCE_DIR}/public.sdk/main/linuxmain.cpp
+    )
+endif()
+
+if(compressor_vst3_enable_cv_gui)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../CV_GUI ${PROJECT_BINARY_DIR}/CV_GUI)
+endif()
 
 add_library(compressor_vst3 MODULE
     source/version.h
@@ -85,7 +112,21 @@ target_compile_definitions(compressor_vst3
     PRIVATE
         DEVELOPMENT=1
         RELEASE=0
+        COMPRESSOR_VST3_ENABLE_CV_GUI=$<BOOL:${compressor_vst3_enable_cv_gui}>
 )
+
+if(compressor_vst3_enable_cv_gui)
+    target_link_libraries(compressor_vst3 PRIVATE CV_GUI::cv_gui)
+endif()
+
+if(WIN32)
+    set_target_properties(compressor_vst3 PROPERTIES
+        PREFIX ""
+        OUTPUT_NAME "compressor_vst3"
+        SUFFIX ".vst3"
+        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-win"
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-win")
+endif()
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(compressor_vst3 PRIVATE dl pthread)
@@ -95,6 +136,8 @@ if(UNIX AND NOT APPLE)
         LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-linux")
 endif()
 
-# Dear ImGui is present in backends/imgui, but no VST3 IPlugView backend is
-# available in this repository. The plug-in therefore exposes native VST3
-# parameters and lets hosts render their built-in parameter editor.
+if(compressor_vst3_enable_cv_gui)
+    message(STATUS "compressor_vst3: CV_GUI Dear ImGui editor enabled")
+else()
+    message(STATUS "compressor_vst3: CV_GUI editor disabled or unavailable; using host-native parameter editor fallback")
+endif()
