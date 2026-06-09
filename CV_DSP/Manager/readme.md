@@ -676,4 +676,857 @@ Com `persistentOnly = true`, apenas parâmetros com `ParameterFlag::Persistent` 
 
 ### Aplicar snapshot
 
+```cpp
+parameters.applySnapshot(snapshot);
+```
 
+A aplicação usa valores normalizados e chama setters imediatos. Isso é adequado para restauração de preset/state antes de processar áudio ou em pontos seguros de sincronização.
+
+## Automação sample-accurate
+
+A automação deve chegar ao manager já traduzida para:
+
+- `ParameterID` neutro ou índice interno resolvido.
+- `sampleOffset` relativo ao bloco atual.
+- `normalizedValue` no intervalo `0..1`.
+- `rampSamples` opcional.
+
+Fluxo recomendado por bloco:
+
+```cpp
+parameters.beginBlock(blockSize);
+
+// Adapter do host insere eventos em ordem qualquer.
+parameters.enqueueAutomation(parameterID, sampleOffset, normalizedValue);
+
+for (std::size_t sample = 0; sample < blockSize; ++sample)
+{
+    parameters.processSample();
+    // Ler valores atuais e processar DSP.
+}
+```
+
+`ParameterManager` ordena a fila por `sampleOffset` e aplica todos os eventos cujo offset é menor ou igual ao sample processado.
+
+## Compatibilidade com hosts
+
+### VST3
+
+Um adapter VST3 futuro deve:
+
+- Mapear `Steinberg::Vst::ParamID` para `ParameterID`.
+- Converter `IParamValueQueue` em chamadas `enqueueAutomation(...)`.
+- Converter valores VST3 normalizados diretamente para `normalizedValue`.
+- Converter state via `IBStream` para/desde `ParameterSnapshot` ou `PresetManager`.
+- Manter qualquer include de Steinberg fora de `CV_DSP/Manager`.
+
+### JUCE
+
+Um adapter JUCE futuro deve:
+
+- Mapear `juce::AudioProcessorParameter` ou `AudioProcessorValueTreeState` para `ParameterDescriptor`.
+- Traduzir valores normalizados para `setImmediateNormalized(...)` ou `enqueueAutomation(...)`.
+- Serializar presets usando `ParameterSnapshot` como formato intermediário neutro.
+- Manter includes de JUCE fora de `CV_DSP/Manager`.
+
+### CLAP
+
+Um adapter CLAP futuro deve:
+
+- Mapear `clap_id` para `ParameterID`.
+- Traduzir eventos `CLAP_EVENT_PARAM_VALUE` e ramps para a fila do manager.
+- Usar flags do descriptor para capacidades de automação/modulação/persistência.
+- Manter includes de CLAP fora de `CV_DSP/Manager`.
+
+### iPlug2
+
+Um adapter iPlug2 futuro deve:
+
+- Mapear IDs de parâmetro iPlug2 para `ParameterID`.
+- Alimentar `ParameterManager` com mudanças normalizadas.
+- Usar descriptors para construir metadados de UI/host.
+- Manter includes de iPlug2 fora de `CV_DSP/Manager`.
+
+### Standalone
+
+Aplicações standalone podem usar diretamente:
+
+- `setImmediateNormalized(...)` para sliders/UI.
+- `setTargetNormalized(...)` em `ParameterState` para transições suaves.
+- `ParameterSnapshot` para salvar/restaurar configurações.
+
+## Boas práticas
+
+- Use IDs estáveis e nunca reutilize um `ParameterID` para outro significado.
+- Prefira strings e arrays `static`, `constexpr` ou `inline constexpr`, pois descriptors não copiam nem possuem strings.
+- Marque parâmetros salvos em preset com `ParameterFlag::Persistent`.
+- Marque parâmetros automatizáveis com `ParameterFlag::Automatable`; caso contrário, `ParameterManager` rejeita eventos de automação.
+- Use `ParameterFlag::Modulatable` somente para parâmetros que poderão ser alvo da futura `ModulationMatrix`.
+- Evite chamar `registerParameter(...)` dentro do callback de áudio; registre durante setup/prepare.
+- Chame `beginBlock(...)` antes de inserir automações de um novo bloco.
+- Chame `processSample()` exatamente uma vez por sample se precisar de automação sample-accurate.
+- Use `getCurrentReal(...)` para valores consumidos pelo DSP.
+- Use `getTargetNormalized(...)` para valores destinados a host/preset.
+- Use snapshots em pontos seguros de sincronização, não como mecanismo de automação por sample.
+
+## Limitações intencionais
+
+- Não há serialização para arquivo ou stream nesta camada.
+- Não há dependência de host SDK.
+- Não há alocação dinâmica para listas de parâmetros, eventos ou snapshots.
+- Não há busca hash/map dinâmica; lookup por ID é linear para preservar simplicidade e evitar heap.
+- Não há ownership de nomes, labels ou tabelas de enum.
+- Não há sistema de modulação ainda; apenas flags e compatibilidade futura.
+- Não há gerenciamento de vozes ainda; `ParameterFlag::PerVoice` é metadado para integração futura.
+
+## Relação entre os três arquivos
+
+```text
+ParameterDescriptor<T>
+    ↓ descreve
+ParameterState<T>
+    ↓ armazena estado runtime e smoothing
+ParameterManager<T, MaxParameters, MaxAutomationEvents>
+    ↓ organiza múltiplos parâmetros, automação e snapshots
+Adapters futuros
+    ↓ traduzem SDKs/hosts para o modelo neutro
+VST3 / JUCE / CLAP / iPlug2 / Standalone
+```
+
+Essa divisão evita duplicação com `Core`, mantém `Manager` independente de frameworks e cria uma base estável para `PresetManager`, `ModulationMatrix`, `VoiceManager` e adapters em `CV_DSP/Adapters/`.
+
+---
+
+# CV_DSP Adapters/VST3 — Contexto e buffers de áudio
+
+Além da camada `Manager`, a biblioteca agora possui adapters VST3 iniciais em:
+
+```text
+CV_DSP/Adapters/VST3/
+├── VST3ProcessContextAdapter.hpp
+├── VST3AudioBufferAdapter.hpp
+└── VST3ParameterAdapter.hpp
+```
+
+Esses arquivos não fazem parte do `Core` nem do `Manager`. Eles são tradutores finos entre o SDK Steinberg VST3 e os tipos neutros já existentes da CV_DSP.
+
+| Arquivo | Tradução principal |
+| --- | --- |
+| `VST3ProcessContextAdapter.hpp` | `Steinberg::Vst::ProcessData` / `Steinberg::Vst::ProcessContext` → `cvdsp::ProcessContext<T>`. |
+| `VST3AudioBufferAdapter.hpp` | `Steinberg::Vst::AudioBusBuffers` → `cvdsp::AudioBufferView<T>` / `cvdsp::ConstAudioBufferView<T>`. |
+| `VST3ParameterAdapter.hpp` | `Steinberg::Vst::IParameterChanges` / `IParamValueQueue` → `ParameterManager::enqueueAutomation(...)`. |
+
+## Objetivos dos adapters VST3
+
+- Manter `Core` e `Manager` independentes do Steinberg VST3 SDK.
+- Evitar duplicação de `AudioBufferView`, `ProcessContext`, `ParameterManager` ou smoothing.
+- Usar operação **zero-copy** para áudio.
+- Não possuir memória de host.
+- Não alocar dinamicamente.
+- Não lançar exceptions.
+- Não usar RTTI.
+- Serem headers C++17-compatible, stateless e real-time safe.
+- Traduzir somente o necessário para o modelo neutro da CV_DSP.
+
+## Namespace dos adapters VST3
+
+Os adapters VST3 ficam em:
+
+```cpp
+namespace cvdsp::adapters::vst3
+```
+
+Uso típico:
+
+```cpp
+using namespace cvdsp::adapters::vst3;
+```
+
+## Dependências dos adapters VST3
+
+### `VST3ProcessContextAdapter.hpp`
+
+Inclui:
+
+```cpp
+#include "../../Core/ProcessContext.hpp"
+#include <pluginterfaces/vst/ivstaudioprocessor.h>
+#include <pluginterfaces/vst/ivstprocesscontext.h>
+```
+
+### `VST3AudioBufferAdapter.hpp`
+
+Inclui:
+
+```cpp
+#include "../../Core/AudioBufferView.hpp"
+#include <cstddef>
+#include <pluginterfaces/vst/ivstaudioprocessor.h>
+```
+
+`VST3ParameterAdapter.hpp` inclui:
+
+```cpp
+#include "../../Manager/ParameterManager.hpp"
+#include <pluginterfaces/vst/ivstaudioprocessor.h>
+#include <pluginterfaces/vst/ivstparameterchanges.h>
+```
+
+Nenhum dos adapters inclui:
+
+- `PresetManager`
+- `ModulationMatrix`
+- `VoiceManager`
+- JUCE
+- CLAP
+- iPlug2
+
+---
+
+## `VST3ProcessContextAdapter.hpp`
+
+`VST3ProcessContextAdapter` converte informações de timing/transporte do VST3 para `cvdsp::ProcessContext<T>`.
+
+### Responsabilidade
+
+Traduzir:
+
+```text
+Steinberg::Vst::ProcessData
+Steinberg::Vst::ProcessContext
+```
+
+para:
+
+```text
+cvdsp::ProcessContext<float>
+cvdsp::ProcessContext<double>
+```
+
+Ele não adapta áudio, parâmetros, MIDI/eventos, presets, modulação ou vozes.
+
+### Características
+
+- Classe `final` com construtor, cópia, assignment e destrutor deletados.
+- Uso exclusivamente estático.
+- Aceita `ProcessContext` VST3 nulo.
+- Aplica defaults seguros antes de ler o contexto VST3.
+- Respeita flags de validade do VST3 para campos opcionais.
+- Retorna `bool` nas funções `fill...` indicando se o `cvdsp::ProcessContext<T>` final é válido.
+
+### API pública
+
+#### Criar contexto a partir de `ProcessData`
+
+```cpp
+static cvdsp::ProcessContext<T> fromProcessData(
+    const Steinberg::Vst::ProcessData& data,
+    T fallbackSampleRate,
+    std::size_t numChannels,
+    T fallbackTempo = static_cast<T>(120)) noexcept;
+```
+
+Uso:
+
+```cpp
+const auto context = VST3ProcessContextAdapter::fromProcessData<float>(
+    data,
+    48000.0f,
+    2);
+```
+
+#### Preencher contexto existente a partir de `ProcessData`
+
+```cpp
+static bool fillFromProcessData(
+    cvdsp::ProcessContext<T>& destination,
+    const Steinberg::Vst::ProcessData& data,
+    T fallbackSampleRate,
+    std::size_t numChannels,
+    T fallbackTempo = static_cast<T>(120)) noexcept;
+```
+
+Uso:
+
+```cpp
+cvdsp::ProcessContext<float> context;
+
+const bool valid = VST3ProcessContextAdapter::fillFromProcessData(
+    context,
+    data,
+    48000.0f,
+    2);
+```
+
+#### Criar contexto a partir de `ProcessContext` VST3
+
+```cpp
+static cvdsp::ProcessContext<T> fromProcessContext(
+    const Steinberg::Vst::ProcessContext* vstContext,
+    std::size_t blockSize,
+    std::size_t numChannels,
+    T fallbackSampleRate,
+    T fallbackTempo = static_cast<T>(120)) noexcept;
+```
+
+Também existe overload por referência:
+
+```cpp
+static cvdsp::ProcessContext<T> fromProcessContext(
+    const Steinberg::Vst::ProcessContext& vstContext,
+    std::size_t blockSize,
+    std::size_t numChannels,
+    T fallbackSampleRate,
+    T fallbackTempo = static_cast<T>(120)) noexcept;
+```
+
+#### Preencher contexto existente a partir de `ProcessContext` VST3
+
+```cpp
+static bool fillFromProcessContext(
+    cvdsp::ProcessContext<T>& destination,
+    const Steinberg::Vst::ProcessContext* vstContext,
+    std::size_t blockSize,
+    std::size_t numChannels,
+    T fallbackSampleRate,
+    T fallbackTempo = static_cast<T>(120)) noexcept;
+```
+
+Também existe overload por referência.
+
+### Campos convertidos
+
+| VST3 | CV_DSP | Regra |
+| --- | --- | --- |
+| `ProcessData::numSamples` | `blockSize` | Valores negativos viram `0`. |
+| `ProcessContext::sampleRate` | `sampleRate` | Copiado se positivo; senão usa fallback. |
+| `ProcessContext::tempo` | `tempo` | Copiado somente com `kTempoValid` e valor positivo. |
+| `timeSigNumerator` / `timeSigDenominator` | `timeSignatureNumerator` / `timeSignatureDenominator` | Copiados somente com `kTimeSigValid` e valores positivos. |
+| `state & kPlaying` | `isPlaying` | Conversão direta para bool. |
+| `state & kRecording` | `isRecording` | Conversão direta para bool. |
+| `projectTimeSamples` | `samplePosition` | Copiado somente se não negativo. |
+| `projectTimeMusic` | `ppqPosition` | Copiado somente com `kProjectTimeMusicValid`. |
+| `barPositionMusic` | `barStartPPQ` | Copiado somente com `kBarPositionValid`. |
+| `projectTimeSamples / sampleRate` | `timeInSeconds` | Preferido quando `projectTimeSamples` é não negativo. |
+| `continousTimeSamples / sampleRate` | `timeInSeconds` | Fallback quando `kContTimeValid` está ativo. |
+
+### Defaults seguros
+
+Antes de aplicar o VST3, o adapter chama/reset logic equivalente ao default de `ProcessContext<T>` e define:
+
+| Campo | Default/fallback |
+| --- | --- |
+| `sampleRate` | `fallbackSampleRate` se positivo; senão `44100`. |
+| `blockSize` | `ProcessData::numSamples` convertido para `std::size_t`, ou `0`. |
+| `numChannels` | Valor informado pelo caller. |
+| `tempo` | `fallbackTempo` se positivo; senão `120`. |
+| `timeSignatureNumerator` | `4`. |
+| `timeSignatureDenominator` | `4`. |
+| `isPlaying` | `false`. |
+| `isRecording` | `false`. |
+| `samplePosition` | `0`. |
+| `ppqPosition` | `0`. |
+| `barStartPPQ` | `0`. |
+| `timeInSeconds` | `0`. |
+
+### Tutorial: usar no `process()` VST3
+
+```cpp
+#include "CV_DSP/Adapters/VST3/VST3ProcessContextAdapter.hpp"
+
+using cvdsp::adapters::vst3::VST3ProcessContextAdapter;
+
+void processVST3Block(
+    Steinberg::Vst::ProcessData& data,
+    double sampleRate,
+    std::size_t mainBusChannels)
+{
+    auto context = VST3ProcessContextAdapter::fromProcessData<float>(
+        data,
+        static_cast<float>(sampleRate),
+        mainBusChannels);
+
+    if (!context.isValid())
+    {
+        return;
+    }
+
+    // context.sampleRate
+    // context.blockSize
+    // context.tempo
+    // context.ppqPosition
+    // context.isPlaying
+    // ... podem ser usados pelos DSPs CV_DSP.
+}
+```
+
+### Cuidados
+
+- `ProcessData::numInputs` e `numOutputs` são contagens de buses, não canais.
+- `numChannels` deve vir do bus principal, do audio adapter ou da política do plugin.
+- Campos musicais VST3 sem flag válida não são confiáveis.
+- `systemTime` VST3 não é usado diretamente como `timeInSeconds`.
+- `projectTimeSamples` negativo é ignorado para evitar conversão perigosa para `std::uint64_t`.
+
+---
+
+## `VST3AudioBufferAdapter.hpp`
+
+`VST3AudioBufferAdapter` converte `Steinberg::Vst::AudioBusBuffers` para views de áudio neutras da CV_DSP.
+
+### Responsabilidade
+
+Traduzir:
+
+```text
+Steinberg::Vst::AudioBusBuffers::channelBuffers32
+Steinberg::Vst::AudioBusBuffers::channelBuffers64
+```
+
+para:
+
+```text
+cvdsp::AudioBufferView<float>
+cvdsp::AudioBufferView<double>
+cvdsp::ConstAudioBufferView<float>
+cvdsp::ConstAudioBufferView<double>
+```
+
+### Características
+
+- Classe `final` com construtor, cópia, assignment e destrutor deletados.
+- Uso exclusivamente estático.
+- Zero-copy: não copia samples.
+- Não aloca buffers.
+- Não possui memória do host.
+- Valida `numSamples`, `numChannels`, array de canais e ponteiros individuais.
+- Retorna view vazia/default quando o bus não pode ser usado.
+- Inclui helpers para `silenceFlags`.
+
+### API pública de criação de views
+
+#### Mutable 32-bit
+
+```cpp
+static cvdsp::AudioBufferView<float> makeMutable32(
+    Steinberg::Vst::AudioBusBuffers& bus,
+    std::size_t numSamples) noexcept;
+```
+
+Cria view mutável sobre `channelBuffers32`.
+
+#### Mutable 64-bit
+
+```cpp
+static cvdsp::AudioBufferView<double> makeMutable64(
+    Steinberg::Vst::AudioBusBuffers& bus,
+    std::size_t numSamples) noexcept;
+```
+
+Cria view mutável sobre `channelBuffers64`.
+
+#### Const 32-bit
+
+```cpp
+static cvdsp::ConstAudioBufferView<float> makeConst32(
+    const Steinberg::Vst::AudioBusBuffers& bus,
+    std::size_t numSamples) noexcept;
+```
+
+Cria view const sobre `channelBuffers32`.
+
+#### Const 64-bit
+
+```cpp
+static cvdsp::ConstAudioBufferView<double> makeConst64(
+    const Steinberg::Vst::AudioBusBuffers& bus,
+    std::size_t numSamples) noexcept;
+```
+
+Cria view const sobre `channelBuffers64`.
+
+### API pública de validação
+
+```cpp
+static std::size_t sampleCount(Steinberg::int32 numSamples) noexcept;
+static std::size_t channelCount(const Steinberg::Vst::AudioBusBuffers& bus) noexcept;
+static bool hasChannels(const Steinberg::Vst::AudioBusBuffers& bus) noexcept;
+static bool isValid32(const Steinberg::Vst::AudioBusBuffers& bus, std::size_t numSamples) noexcept;
+static bool isValid64(const Steinberg::Vst::AudioBusBuffers& bus, std::size_t numSamples) noexcept;
+static bool isValid32(const Steinberg::Vst::AudioBusBuffers& bus, Steinberg::int32 numSamples) noexcept;
+static bool isValid64(const Steinberg::Vst::AudioBusBuffers& bus, Steinberg::int32 numSamples) noexcept;
+static bool isInactive(const Steinberg::Vst::AudioBusBuffers& bus, std::size_t numSamples) noexcept;
+```
+
+Regras de validação:
+
+- `numSamples` precisa ser maior que zero.
+- `numChannels` precisa ser maior que zero.
+- `channelBuffers32` ou `channelBuffers64` precisa ser não nulo.
+- Todos os ponteiros individuais de canais precisam ser não nulos.
+- Se qualquer condição falhar, o adapter retorna view vazia/default.
+
+### API pública para `silenceFlags`
+
+```cpp
+static bool isChannelSilent(const Steinberg::Vst::AudioBusBuffers& bus, std::size_t channel) noexcept;
+static bool isBusSilent(const Steinberg::Vst::AudioBusBuffers& bus) noexcept;
+static void markChannelSilent(Steinberg::Vst::AudioBusBuffers& bus, std::size_t channel) noexcept;
+static void clearChannelSilent(Steinberg::Vst::AudioBusBuffers& bus, std::size_t channel) noexcept;
+static void markAllChannelsSilent(Steinberg::Vst::AudioBusBuffers& bus) noexcept;
+static void clearAllSilenceFlags(Steinberg::Vst::AudioBusBuffers& bus) noexcept;
+static Steinberg::uint64 silenceFlags(const Steinberg::Vst::AudioBusBuffers& bus) noexcept;
+```
+
+### Tutorial: criar views de input/output 32-bit
+
+```cpp
+#include "CV_DSP/Adapters/VST3/VST3AudioBufferAdapter.hpp"
+
+using cvdsp::adapters::vst3::VST3AudioBufferAdapter;
+
+void processFloatBus(Steinberg::Vst::ProcessData& data)
+{
+    const auto samples = VST3AudioBufferAdapter::sampleCount(data.numSamples);
+
+    if (data.numInputs <= 0 || data.numOutputs <= 0)
+        return;
+
+    auto input = VST3AudioBufferAdapter::makeConst32(
+        data.inputs[0],
+        samples);
+
+    auto output = VST3AudioBufferAdapter::makeMutable32(
+        data.outputs[0],
+        samples);
+
+    if (!input.isValid() || !output.isValid())
+        return;
+
+    const std::size_t channels = output.getNumChannels();
+    const std::size_t numSamples = output.getNumSamples();
+
+    for (std::size_t channel = 0; channel < channels; ++channel)
+    {
+        const float* in = input.getChannel(channel);
+        float* out = output.getChannel(channel);
+
+        for (std::size_t sample = 0; sample < numSamples; ++sample)
+            out[sample] = in[sample];
+    }
+
+    VST3AudioBufferAdapter::clearAllSilenceFlags(data.outputs[0]);
+}
+```
+
+### Tutorial: criar views de output 64-bit
+
+```cpp
+using cvdsp::adapters::vst3::VST3AudioBufferAdapter;
+
+void processDoubleOutput(
+    Steinberg::Vst::AudioBusBuffers& outputBus,
+    Steinberg::int32 vstNumSamples)
+{
+    auto output = VST3AudioBufferAdapter::makeMutable64(
+        outputBus,
+        VST3AudioBufferAdapter::sampleCount(vstNumSamples));
+
+    if (!output.isValid())
+        return;
+
+    for (std::size_t channel = 0; channel < output.getNumChannels(); ++channel)
+    {
+        double* out = output.getChannel(channel);
+
+        for (std::size_t sample = 0; sample < output.getNumSamples(); ++sample)
+            out[sample] = 0.0;
+    }
+
+    VST3AudioBufferAdapter::markAllChannelsSilent(outputBus);
+}
+```
+
+### Estratégia para buses inativos
+
+Um bus é tratado como sem áudio útil quando:
+
+- `numSamples == 0`;
+- `numChannels <= 0`;
+- array de canais é nulo;
+- qualquer ponteiro individual de canal é nulo.
+
+Nesses casos, o adapter não lança erro e não aloca fallback. Ele apenas retorna view vazia/default.
+
+### Estratégia para `silentFlags`
+
+- `silentFlags` são tratados como hints de otimização.
+- Input silencioso não significa automaticamente que o plugin não deve processar.
+- Output deve limpar flags quando gerar áudio.
+- Output deve marcar flags quando realmente gerar silêncio.
+- As flags não substituem validação de ponteiros.
+
+### Lifetime das views
+
+As views retornadas por `VST3AudioBufferAdapter` são não proprietárias.
+
+Regra obrigatória:
+
+```text
+Criar view dentro da chamada process().
+Usar imediatamente.
+Descartar antes de retornar ao host.
+Nunca armazenar como membro persistente.
+```
+
+O host VST3 continua sendo dono dos buffers.
+
+---
+
+## `VST3ParameterAdapter.hpp`
+
+`VST3ParameterAdapter` converte automação de parâmetros VST3 para a fila neutra já existente do `ParameterManager`.
+
+### Responsabilidade
+
+Traduzir:
+
+```text
+Steinberg::Vst::ProcessData::inputParameterChanges
+Steinberg::Vst::IParameterChanges
+Steinberg::Vst::IParamValueQueue
+```
+
+para chamadas diretas a:
+
+```cpp
+ParameterManager::enqueueAutomation(parameterID, sampleOffset, normalizedValue)
+```
+
+Ele não cria fila própria, não interpola curvas, não aplica smoothing e não converte automação para valor real antes do Manager/State.
+
+### Tipos principais
+
+#### `VST3IdentityParameterIDMapper`
+
+Mapper default que converte `Steinberg::Vst::ParamID` para `cvdsp::manager::ParameterID` usando o mesmo valor numérico.
+
+```cpp
+VST3IdentityParameterIDMapper mapper;
+cvdsp::manager::ParameterID id = 0;
+mapper.map(vstParamID, id);
+```
+
+Hosts/wrappers podem fornecer um mapper customizado com a mesma API:
+
+```cpp
+struct MyMapper
+{
+    bool map(Steinberg::Vst::ParamID vstID,
+             cvdsp::manager::ParameterID& outID) const noexcept;
+};
+```
+
+#### `VST3ParameterAdapterResult`
+
+Resultado diagnóstico sem alocação usado para auditoria e debugging fora do caminho crítico:
+
+| Campo | Significado |
+| --- | --- |
+| `queuesVisited` | Quantidade de queues VST3 visitadas. |
+| `queuesRejected` | Queues rejeitadas antes de percorrer pontos. |
+| `pointsVisited` | Pontos VST3 visitados. |
+| `pointsEnqueued` | Pontos aceitos pelo `ParameterManager`. |
+| `pointsRejected` | Pontos rejeitados pelo adapter ou manager. |
+| `invalidQueues` | Queues nulas/inválidas. |
+| `invalidPoints` | Pontos inválidos ou `getPoint` sem sucesso. |
+| `invalidIDs` | IDs mapeados que não existem no Manager. |
+| `notAutomatable` | Pontos rejeitados por parâmetro não automatizável. |
+| `invalidSampleOffsets` | Offsets fora do bloco atual. |
+| `queueFull` | Rejeições por fila fixa cheia no Manager. |
+| `lastStatus` | Último `ParameterManagerStatus` observado. |
+| `hadOverflow` | `true` quando `EventQueueFull` ocorreu. |
+
+`success()` retorna `true` quando nenhuma rejeição foi registrada.
+
+### API pública
+
+Validação:
+
+```cpp
+static bool isValidChanges(Steinberg::Vst::IParameterChanges* changes) noexcept;
+static bool isValidQueue(const Steinberg::Vst::IParamValueQueue* queue) noexcept;
+static bool hasPoints(Steinberg::int32 pointCount) noexcept;
+static bool isValidSampleOffset(Steinberg::int32 sampleOffset) noexcept;
+static std::size_t toSampleOffset(Steinberg::int32 sampleOffset) noexcept;
+```
+
+Adaptação de `ProcessData`:
+
+```cpp
+static VST3ParameterAdapterResult adaptProcessData(
+    const Steinberg::Vst::ProcessData& data,
+    ParameterManager<T, MaxParameters, MaxAutomationEvents>& manager) noexcept;
+
+static VST3ParameterAdapterResult adaptProcessData(
+    const Steinberg::Vst::ProcessData& data,
+    ParameterManager<T, MaxParameters, MaxAutomationEvents>& manager,
+    const Mapper& mapper) noexcept;
+```
+
+Adaptação de `IParameterChanges`:
+
+```cpp
+static VST3ParameterAdapterResult adaptParameterChanges(
+    Steinberg::Vst::IParameterChanges* changes,
+    ParameterManager<T, MaxParameters, MaxAutomationEvents>& manager) noexcept;
+
+static VST3ParameterAdapterResult adaptParameterChanges(
+    Steinberg::Vst::IParameterChanges* changes,
+    ParameterManager<T, MaxParameters, MaxAutomationEvents>& manager,
+    const Mapper& mapper) noexcept;
+```
+
+Adaptação de uma queue:
+
+```cpp
+static VST3ParameterAdapterResult adaptQueue(
+    Steinberg::Vst::IParamValueQueue& queue,
+    ParameterManager<T, MaxParameters, MaxAutomationEvents>& manager) noexcept;
+
+static VST3ParameterAdapterResult adaptQueue(
+    Steinberg::Vst::IParamValueQueue& queue,
+    ParameterManager<T, MaxParameters, MaxAutomationEvents>& manager,
+    const Mapper& mapper) noexcept;
+```
+
+### Tutorial: adaptar automação VST3 para `ParameterManager`
+
+```cpp
+#include "CV_DSP/Adapters/VST3/VST3ParameterAdapter.hpp"
+
+using cvdsp::adapters::vst3::VST3ParameterAdapter;
+
+void processAutomation(
+    Steinberg::Vst::ProcessData& data,
+    cvdsp::manager::ParameterManager<float, 128, 1024>& parameters,
+    std::size_t blockSize)
+{
+    // Importante: beginBlock limpa a fila de automação e define o tamanho do bloco.
+    parameters.beginBlock(blockSize);
+
+    const auto result = VST3ParameterAdapter::adaptProcessData(
+        data,
+        parameters);
+
+    if (result.hadOverflow)
+    {
+        // Diagnóstico opcional fora do caminho crítico.
+    }
+}
+```
+
+### Tutorial: mapper customizado
+
+```cpp
+struct ParamMapper
+{
+    bool map(
+        Steinberg::Vst::ParamID vstID,
+        cvdsp::manager::ParameterID& outID) const noexcept
+    {
+        switch (vstID)
+        {
+            case 1000: outID = 1; return true;
+            case 1001: outID = 2; return true;
+            default: return false;
+        }
+    }
+};
+
+const auto result = VST3ParameterAdapter::adaptProcessData(
+    data,
+    parameters,
+    ParamMapper{});
+```
+
+### Estratégia sample-accurate
+
+- O adapter preserva `sampleOffset` retornado por `IParamValueQueue::getPoint`.
+- O adapter preserva `ParamValue` normalizado.
+- O adapter encaminha cada ponto válido para `ParameterManager::enqueueAutomation(...)`.
+- O Manager ordena/aplica os eventos e o `ParameterState` faz smoothing, se configurado.
+- O adapter para no primeiro `EventQueueFull` e registra `hadOverflow`, sem criar fallback queue.
+
+### Cuidados
+
+- Chame `ParameterManager::beginBlock(...)` antes de adaptar automação; caso contrário, eventos podem ser limpos depois.
+- Não chame `adaptProcessData` para `outputParameterChanges`; automação recebida do host vem de `inputParameterChanges`.
+- Parâmetros sem `ParameterFlag::Automatable` serão rejeitados pelo Manager como `NotAutomatable`.
+- O adapter não deve ser usado para presets, MIDI, note expression, modulação ou vozes.
+
+---
+
+## Fluxo VST3 recomendado com os adapters
+
+```text
+Steinberg::Vst::ProcessData
+    ↓
+VST3ProcessContextAdapter
+    ↓
+cvdsp::ProcessContext<T>
+    ↓
+ParameterManager::beginBlock(context)
+    ↓
+VST3AudioBufferAdapter
+    ↓
+AudioBufferView / ConstAudioBufferView
+    ↓
+DSP CV_DSP
+```
+
+Fluxo de bloco recomendado:
+
+```text
+1. Adaptar ProcessContext.
+2. Chamar ParameterManager::beginBlock(context).
+3. Adaptar automação VST3 com VST3ParameterAdapter.
+4. Criar AudioBufferView/ConstAudioBufferView.
+5. Processar áudio chamando ParameterManager::processSample() quando necessário.
+6. Atualizar silenceFlags de output.
+```
+
+## Boas práticas específicas para VST3
+
+- Não usar `ProcessData::numInputs` ou `numOutputs` como número de canais; eles indicam quantidade de buses.
+- Usar `AudioBusBuffers::numChannels` para canais reais de um bus.
+- Escolher `makeMutable32`/`makeConst32` somente para processamento 32-bit.
+- Escolher `makeMutable64`/`makeConst64` somente para processamento 64-bit.
+- Não reinterpretar `float` como `double` nem `double` como `float`.
+- Não copiar áudio para buffers intermediários.
+- Não guardar ponteiros VST3 fora do bloco atual.
+- Tratar `numSamples == 0` como bloco sem áudio útil, não como falha fatal.
+- Usar `silenceFlags` como otimização, não como fonte única de verdade.
+
+## Relação atualizada entre Manager e Adapters/VST3
+
+```text
+Core
+├── AudioBufferView<T>
+└── ProcessContext<T>
+
+Manager
+├── ParameterDescriptor<T>
+├── ParameterState<T>
+└── ParameterManager<T>
+
+Adapters/VST3
+├── VST3ProcessContextAdapter
+├── VST3AudioBufferAdapter
+└── VST3ParameterAdapter
+
+Fluxo
+VST3 SDK → Adapters/VST3 → Core/Manager neutros → DSP modules
+```
+
+Essa arquitetura mantém o SDK Steinberg fora de `Core` e `Manager`, preserva compatibilidade futura com CLAP/JUCE/iPlug2 e evita duplicação das abstrações centrais da CV_DSP.
