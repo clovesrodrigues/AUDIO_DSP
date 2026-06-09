@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.14.0)
 
-project(compressor_vst3
+project(graphic_eq_vst3
     VERSION 1.0.0.0
-    DESCRIPTION "CV_DSP Compressor VST 3 Plug-in"
+    DESCRIPTION "CV_DSP Graphic EQ VST 3 Plug-in"
 )
 
 set(CMAKE_CXX_STANDARD 20)
@@ -10,10 +10,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(COMPRESSOR_VST3_ENABLE_CV_GUI "Enable the CV_GUI Dear ImGui editor when the platform backend is available" ${WIN32})
-set(compressor_vst3_enable_cv_gui OFF)
-if(COMPRESSOR_VST3_ENABLE_CV_GUI AND WIN32)
-    set(compressor_vst3_enable_cv_gui ON)
+option(GRAPHIC_EQ_VST3_ENABLE_CV_GUI "Enable the CV_GUI Dear ImGui editor when the platform backend is available" ${WIN32})
+set(plugin_enable_cv_gui OFF)
+if(GRAPHIC_EQ_VST3_ENABLE_CV_GUI AND WIN32)
+    set(plugin_enable_cv_gui ON)
 endif()
 
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../backends/vst3sdk" CACHE PATH "Path to the bundled VST3 SDK")
@@ -71,24 +71,18 @@ set(vst3_sdk_sources
 )
 
 if(WIN32)
-    list(APPEND vst3_sdk_sources
-        ${vst3sdk_SOURCE_DIR}/public.sdk/main/dllmain.cpp
-    )
+    list(APPEND vst3_sdk_sources ${vst3sdk_SOURCE_DIR}/public.sdk/main/dllmain.cpp)
 elseif(APPLE)
-    list(APPEND vst3_sdk_sources
-        ${vst3sdk_SOURCE_DIR}/public.sdk/main/macmain.cpp
-    )
+    list(APPEND vst3_sdk_sources ${vst3sdk_SOURCE_DIR}/public.sdk/main/macmain.cpp)
 else()
-    list(APPEND vst3_sdk_sources
-        ${vst3sdk_SOURCE_DIR}/public.sdk/main/linuxmain.cpp
-    )
+    list(APPEND vst3_sdk_sources ${vst3sdk_SOURCE_DIR}/public.sdk/main/linuxmain.cpp)
 endif()
 
-if(compressor_vst3_enable_cv_gui)
+if(plugin_enable_cv_gui)
     add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../CV_GUI ${PROJECT_BINARY_DIR}/CV_GUI)
 endif()
 
-add_library(compressor_vst3 MODULE
+add_library(graphic_eq_vst3 MODULE
     source/version.h
     source/TPcids.h
     source/TPprocessor.h
@@ -99,7 +93,7 @@ add_library(compressor_vst3 MODULE
     ${vst3_sdk_sources}
 )
 
-target_include_directories(compressor_vst3
+target_include_directories(graphic_eq_vst3
     PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/../..
         ${PROJECT_BINARY_DIR}
@@ -108,36 +102,36 @@ target_include_directories(compressor_vst3
         ${vst3sdk_SOURCE_DIR}/public.sdk
 )
 
-target_compile_definitions(compressor_vst3
+target_compile_definitions(graphic_eq_vst3
     PRIVATE
         DEVELOPMENT=1
         RELEASE=0
-        COMPRESSOR_VST3_ENABLE_CV_GUI=$<BOOL:${compressor_vst3_enable_cv_gui}>
+        GRAPHIC_EQ_VST3_ENABLE_CV_GUI=$<BOOL:${plugin_enable_cv_gui}>
 )
 
-if(compressor_vst3_enable_cv_gui)
-    target_link_libraries(compressor_vst3 PRIVATE CV_GUI::cv_gui)
+if(plugin_enable_cv_gui)
+    target_link_libraries(graphic_eq_vst3 PRIVATE CV_GUI::cv_gui)
 endif()
 
 if(WIN32)
-    set_target_properties(compressor_vst3 PROPERTIES
+    set_target_properties(graphic_eq_vst3 PROPERTIES
         PREFIX ""
-        OUTPUT_NAME "compressor_vst3"
+        OUTPUT_NAME "graphic_eq_vst3"
         SUFFIX ".vst3"
-        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-win"
-        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-win")
+        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/graphic_eq_vst3.vst3/Contents/x86_64-win"
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/graphic_eq_vst3.vst3/Contents/x86_64-win")
 endif()
 
 if(UNIX AND NOT APPLE)
-    target_link_libraries(compressor_vst3 PRIVATE dl pthread)
-    set_target_properties(compressor_vst3 PROPERTIES
+    target_link_libraries(graphic_eq_vst3 PRIVATE dl pthread)
+    set_target_properties(graphic_eq_vst3 PROPERTIES
         PREFIX ""
-        OUTPUT_NAME "compressor_vst3"
-        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/compressor_vst3.vst3/Contents/x86_64-linux")
+        OUTPUT_NAME "graphic_eq_vst3"
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/VST3/graphic_eq_vst3.vst3/Contents/x86_64-linux")
 endif()
 
-if(compressor_vst3_enable_cv_gui)
-    message(STATUS "compressor_vst3: CV_GUI Dear ImGui editor enabled")
+if(plugin_enable_cv_gui)
+    message(STATUS "graphic_eq_vst3: CV_GUI Dear ImGui editor enabled")
 else()
-    message(STATUS "compressor_vst3: CV_GUI editor disabled or unavailable; using host-native parameter editor fallback")
+    message(STATUS "graphic_eq_vst3: CV_GUI editor disabled or unavailable; using host-native parameter editor fallback")
 endif()
