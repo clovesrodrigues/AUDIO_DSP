@@ -8,6 +8,10 @@
 #include "base/source/fstreamer.h"
 #include "public.sdk/vst/vstparameters.h"
 
+#if COMPRESSOR_VST3_ENABLE_CV_GUI
+#include "CV_GUI/ImGuiBackend.hpp"
+#endif
+
 using namespace Steinberg;
 
 namespace CV {
@@ -114,13 +118,18 @@ tresult PLUGIN_API CompressorVST3Controller::getState (IBStream* /*state*/)
 //------------------------------------------------------------------------
 IPlugView* PLUGIN_API CompressorVST3Controller::createView (FIDString name)
 {
-    if (FIDStringsEqual (name, Vst::ViewType::kEditor))
-    {
-        // Dear ImGui exists under backends/imgui, but this repository does not
-        // provide a VST3 IPlugView integration/backend for it. Returning nullptr
-        // intentionally exposes the native VST3 parameter editor supplied by hosts.
+    if (!FIDStringsEqual (name, Vst::ViewType::kEditor))
         return nullptr;
-    }
+
+#if COMPRESSOR_VST3_ENABLE_CV_GUI
+    CV::GUI::ImGuiBackend guiBackend (this);
+    if (auto* view = guiBackend.createView (name))
+        return view;
+#endif
+
+    // Fallback: returning nullptr intentionally exposes the native VST3
+    // parameter editor supplied by hosts/DAWs when CV_GUI is unavailable for
+    // this platform or disabled by the build configuration.
     return nullptr;
 }
 
