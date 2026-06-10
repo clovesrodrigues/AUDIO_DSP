@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <cstddef>
 #include <type_traits>
 #include <cassert>
@@ -140,7 +141,7 @@ public:
 
         // alpha = exp(-2*pi*fc / fs)
         // para estabilidade numérica, quando fc >> fs/2, f clamped
-        const value_type omega = static_cast<value_type>(2.0) * static_cast<value_type>(M_PI) * f / static_cast<value_type>(m_sampleRate);
+        const value_type omega = static_cast<value_type>(2.0) * std::numbers::pi_v<value_type> * f / static_cast<value_type>(m_sampleRate);
         const value_type alpha = std::exp(-omega);
 
         m_cutoffHz = f;
@@ -227,7 +228,7 @@ public:
         const value_type minFreq = static_cast<value_type>(1e-6);
         const value_type nyquist = static_cast<value_type>(m_sampleRate) * static_cast<value_type>(0.5);
         const value_type f = std::clamp(freqHz, minFreq, nyquist - static_cast<value_type>(1e-12));
-        const value_type omega = static_cast<value_type>(2.0) * static_cast<value_type>(M_PI) * f / static_cast<value_type>(m_sampleRate);
+        const value_type omega = static_cast<value_type>(2.0) * std::numbers::pi_v<value_type> * f / static_cast<value_type>(m_sampleRate);
         const value_type alpha = std::exp(-omega);
 
         // lowpass coefficients: b0 = 1 - alpha, a1 = alpha
