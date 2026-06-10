@@ -40,7 +40,7 @@ class WahWahDSP
 public:
     using value_type = T;
     using Descriptor = manager::ParameterDescriptor<T>;
-    using DescriptorArray = std::array<Descriptor, 13>;
+    using DescriptorArray = std::array<Descriptor, 14>;
 
     constexpr WahWahDSP() noexcept = default;
 
@@ -177,6 +177,7 @@ public:
         static const DescriptorArray descriptors {{
             makeBoolean(PedalParameterIDs::Bypass, "Bypass", "Bypass", false, "wah_wah.bypass", manager::toMask(manager::ParameterFlag::Bypass)),
             makeDecibel(PedalParameterIDs::InputGain, "Input", "Input Gain", -24.0, 24.0, 0.0, "wah_wah.input_gain", "Global"),
+            makeBoolean(PedalParameterIDs::ExpressionSource, "Expr Eng", "Expression Engine", false, "wah_wah.expression_engine", kAutomatablePersistent),
             makePercent(PedalParameterIDs::Expression, "Pedal", "Expression Pedal", 0.0, "wah_wah.expression", "Expression"),
             makeFrequency(PedalParameterIDs::MinFrequency, "Min Freq", "Minimum Frequency", 120.0, 1000.0, 250.0, "wah_wah.min_frequency", "Filter"),
             makeFrequency(PedalParameterIDs::MaxFrequency, "Max Freq", "Maximum Frequency", 800.0, 4000.0, 2200.0, "wah_wah.max_frequency", "Filter"),

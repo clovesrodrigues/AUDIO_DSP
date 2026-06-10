@@ -42,7 +42,7 @@ class SustainerDSP
 public:
     using value_type = T;
     using Descriptor = manager::ParameterDescriptor<T>;
-    using DescriptorArray = std::array<Descriptor, 13>;
+    using DescriptorArray = std::array<Descriptor, 15>;
 
     constexpr SustainerDSP() noexcept = default;
 
@@ -198,6 +198,8 @@ public:
             makePercent(PedalParameterIDs::Sustain, "Sustain", "Sustain", 0.55, "sustainer.sustain", "Dynamics"),
             makeMilliseconds(PedalParameterIDs::Attack, "Attack", "Envelope Attack", 0.2, 50.0, 5.0, "sustainer.attack", "Dynamics"),
             makeMilliseconds(PedalParameterIDs::Release, "Release", "Envelope Release", 50.0, 2000.0, 750.0, "sustainer.release", "Dynamics"),
+            makeLinear(PedalParameterIDs::CompressionRatio, "Ratio", "Compression Ratio", 1.0, 40.0, 11.25, "sustainer.ratio", "Dynamics"),
+            makeDecibel(PedalParameterIDs::MakeupGain, "Makeup", "Make-up Gain", -12.0, 30.0, 10.8, "sustainer.makeup_gain", "Dynamics"),
             makeDecibel(PedalParameterIDs::OutputLevel, "Level", "Output Level", -36.0, 12.0, 0.0, "sustainer.level", "Global"),
             makePercent(PedalParameterIDs::DryWetMix, "Mix", "Dry/Wet Mix", 1.0, "sustainer.mix", "Global"),
             makeBoolean(PedalParameterIDs::GateEnable, "Gate", "Gate Enable", true, "sustainer.gate_enable", kAutomatablePersistent),

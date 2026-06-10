@@ -17,6 +17,9 @@ readonly pedals=(
   "vintage_hard_distortion_vst3"
   "vintage_fuzz_vst3"
   "chainsaw_metal_vst3"
+  "sustainer_vst3"
+  "phaser_vst3"
+  "wah_wah_vst3"
 )
 
 mkdir -p "${build_root}"

@@ -61,6 +61,8 @@ public:
     void setFeedback(T feedback) noexcept { phaser_.setFeedback(feedback); }
     void setMix(T normalized) noexcept { phaser_.setMix(normalized); }
     void setFrequencyRangeHz(T minHz, T maxHz) noexcept { phaser_.setFrequencyRange(minHz, maxHz); }
+    void setMinFrequencyHz(T minHz) noexcept { phaser_.setFrequencyRange(minHz, phaser_.getMaxFrequencyHz()); }
+    void setMaxFrequencyHz(T maxHz) noexcept { phaser_.setFrequencyRange(phaser_.getMinFrequencyHz(), maxHz); }
     void setStages(std::size_t stages) noexcept { phaser_.setStages(stages); }
     void setWaveform(LFOWaveform waveform) noexcept { phaser_.setWaveform(waveform); }
 
