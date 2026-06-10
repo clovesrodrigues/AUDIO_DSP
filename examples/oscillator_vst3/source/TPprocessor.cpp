@@ -8,6 +8,7 @@
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 using namespace Steinberg;
@@ -16,6 +17,26 @@ namespace CV {
 namespace {
 constexpr cvdsp::manager::ParameterFlags kParamFlags =
     cvdsp::manager::ParameterFlag::Automatable | cvdsp::manager::ParameterFlag::Persistent;
+constexpr int kMaxPhaseWarmupSamples = 8192;
+
+void applyPhaseOffset (cvdsp::modulation::Oscillator<float>& oscillator, float phaseDegrees, float frequencyHz, double sampleRate) noexcept
+{
+    oscillator.reset ();
+
+    if (!std::isfinite (phaseDegrees) || !std::isfinite (frequencyHz) || !std::isfinite (sampleRate) ||
+        frequencyHz <= 0.0f || sampleRate <= 0.0)
+        return;
+
+    float normalizedPhase = phaseDegrees / 360.0f;
+    normalizedPhase -= std::floor (normalizedPhase);
+    if (normalizedPhase < 0.0f)
+        normalizedPhase += 1.0f;
+
+    const double samplesPerCycle = sampleRate / static_cast<double> (frequencyHz);
+    const int warmupSamples = std::clamp (static_cast<int> (std::lround (normalizedPhase * samplesPerCycle)), 0, kMaxPhaseWarmupSamples);
+    for (int sample = 0; sample < warmupSamples; ++sample)
+        (void)oscillator.process ();
+}
 }
 
 OscillatorVST3Processor::OscillatorVST3Processor ()
@@ -124,7 +145,7 @@ void OscillatorVST3Processor::registerParameters () noexcept
     using namespace cvdsp::manager;
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamOscillatorWaveform, "Waveform", "Waveform", ParameterUnit::None, ParameterScale::Enum, kParamFlags, {0.0f, 3.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "waveform", "", "Oscillator", 2), ParameterSmoothingMode::None);
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamOscillatorFrequency, "Frequency", "Frequency", ParameterUnit::Hertz, ParameterScale::Logarithmic, kParamFlags, {20.0f, 20000.0f, 440.0f, 0.0f, 1.0f}, nullptr, 0, "frequency", "Hz", "Oscillator", 2), ParameterSmoothingMode::Linear);
-    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamOscillatorPhase, "Phase", "Phase", ParameterUnit::Degrees, ParameterScale::Linear, kParamFlags, {0.0f, 360.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "phase", "deg", "Oscillator", 2), ParameterSmoothingMode::Linear);
+    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamOscillatorPhase, "Phase", "Phase", ParameterUnit::Degrees, ParameterScale::Linear, kParamFlags, {0.0f, 360.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "phase", "deg", "Oscillator", 2), ParameterSmoothingMode::None);
 }
 
 void OscillatorVST3Processor::applyParametersToDSP () noexcept
@@ -139,7 +160,7 @@ void OscillatorVST3Processor::applyParametersToDSP () noexcept
         osc.setWaveform (waveform);
         osc.setFrequency (frequencyHz_);
         if (phaseDegrees_ != lastAppliedPhaseDegrees_)
-            osc.setPhase (phaseDegrees_ / 360.0f);
+            applyPhaseOffset (osc, phaseDegrees_, frequencyHz_, sampleRate_);
     }
     lastAppliedPhaseDegrees_ = phaseDegrees_;
 }
