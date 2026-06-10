@@ -87,6 +87,39 @@ public:
     }
 
     /**
+     * @brief Set normalized phase.
+     *
+     * @param phase Normalized phase. Values outside [0, 1) wrap safely.
+     */
+    void setPhase(
+        T phase) noexcept
+    {
+        if (!std::isfinite(phase))
+        {
+            phase = static_cast<T>(0);
+        }
+
+        phase_ =
+            phase
+            -
+            std::floor(phase);
+
+        if (phase_ < static_cast<T>(0))
+        {
+            phase_ += static_cast<T>(1);
+        }
+    }
+
+    /**
+     * @brief Get current normalized phase.
+     */
+    [[nodiscard]]
+    T getPhase() const noexcept
+    {
+        return phase_;
+    }
+
+    /**
      * @brief Set oscillator frequency.
      *
      * @param frequency Frequency in Hz.
