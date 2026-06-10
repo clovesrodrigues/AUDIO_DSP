@@ -23,6 +23,21 @@ bool processPedal(Pedal& pedal, float* channel, std::size_t count)
 
 bool descriptorsAreValid()
 {
+    for (const auto& descriptor : cvdsp::guitar::pedals::SustainerDSP<float>::getParameterDescriptors())
+    {
+        if (!descriptor.isValid())
+            return false;
+    }
+    for (const auto& descriptor : cvdsp::guitar::pedals::WahWahDSP<float>::getParameterDescriptors())
+    {
+        if (!descriptor.isValid())
+            return false;
+    }
+    for (const auto& descriptor : cvdsp::guitar::pedals::PhaserDSP<float>::getParameterDescriptors())
+    {
+        if (!descriptor.isValid())
+            return false;
+    }
     for (const auto& descriptor : cvdsp::guitar::pedals::ClassicOverdriveDSP<float>::getParameterDescriptors())
     {
         if (!descriptor.isValid())
@@ -59,15 +74,32 @@ int main()
         source[i] = std::sin(n * 0.071f) * 0.25f + std::sin(n * 0.013f) * 0.1f;
     }
 
+    cvdsp::guitar::pedals::SustainerDSP<float> sustainer;
+    cvdsp::guitar::pedals::WahWahDSP<float> wah;
+    cvdsp::guitar::pedals::PhaserDSP<float> phaser;
     cvdsp::guitar::pedals::ClassicOverdriveDSP<float> overdrive;
     cvdsp::guitar::pedals::VintageHardDistortionDSP<float> distortion;
     cvdsp::guitar::pedals::VintageFuzzDSP<float> fuzz;
     cvdsp::guitar::pedals::ChainsawMetalDSP<float> chainsaw;
 
+    sustainer.prepare(48000.0f);
+    wah.prepare(48000.0f);
+    phaser.prepare(48000.0f);
     overdrive.prepare(48000.0f);
     distortion.prepare(48000.0f);
     fuzz.prepare(48000.0f);
     chainsaw.prepare(48000.0f);
+
+    sustainer.setSustain(0.65f);
+    sustainer.setLevelDb(-6.0f);
+
+    wah.setExpression(0.55f);
+    wah.setLevelDb(-3.0f);
+
+    phaser.setRateHz(0.35f);
+    phaser.setDepth(0.85f);
+    phaser.setFeedback(0.25f);
+    phaser.setLevelDb(-3.0f);
 
     overdrive.setDrive(0.45f);
     overdrive.setTone(0.55f);
@@ -90,26 +122,41 @@ int main()
 
     for (std::size_t i = 0; i < kNumSamples; ++i)
         buffer[i] = source[i];
-    if (!processPedal(overdrive, buffer, kNumSamples))
+    if (!processPedal(sustainer, buffer, kNumSamples))
         return 1;
 
     for (std::size_t i = 0; i < kNumSamples; ++i)
         buffer[i] = source[i];
-    if (!processPedal(distortion, buffer, kNumSamples))
+    if (!processPedal(wah, buffer, kNumSamples))
         return 2;
 
     for (std::size_t i = 0; i < kNumSamples; ++i)
         buffer[i] = source[i];
-    if (!processPedal(fuzz, buffer, kNumSamples))
+    if (!processPedal(phaser, buffer, kNumSamples))
         return 3;
 
     for (std::size_t i = 0; i < kNumSamples; ++i)
         buffer[i] = source[i];
-    if (!processPedal(chainsaw, buffer, kNumSamples))
+    if (!processPedal(overdrive, buffer, kNumSamples))
         return 4;
 
-    if (!descriptorsAreValid())
+    for (std::size_t i = 0; i < kNumSamples; ++i)
+        buffer[i] = source[i];
+    if (!processPedal(distortion, buffer, kNumSamples))
         return 5;
+
+    for (std::size_t i = 0; i < kNumSamples; ++i)
+        buffer[i] = source[i];
+    if (!processPedal(fuzz, buffer, kNumSamples))
+        return 6;
+
+    for (std::size_t i = 0; i < kNumSamples; ++i)
+        buffer[i] = source[i];
+    if (!processPedal(chainsaw, buffer, kNumSamples))
+        return 7;
+
+    if (!descriptorsAreValid())
+        return 8;
 
     return 0;
 }

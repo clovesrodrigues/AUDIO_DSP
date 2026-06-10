@@ -239,3 +239,81 @@ Com a família inicial completa, os próximos passos recomendados são:
 2. Melhorar filtros de oversampling para modos high-gain extremos.
 3. Criar adapters/GUI/VST3 para expor os parâmetros dos pedais.
 4. Fazer medições espectrais/aliasing com FFT e sweeps controlados.
+
+
+## Semana/Fase H — Expansão para pedais de dinâmica
+
+### Prompt H1 — SustainerDSP
+
+Planejado e implementado um pedal `SustainerDSP` independente do `PedalDriveCore`, com topologia de dinâmica: ganho de entrada, HPF de sidechain, `EnvelopeFollower`, gain computer de sustain com boost máximo limitado, `NoiseGate` com hysteresis/hold, suavização de ganho, nível de saída e dry/wet mix.
+
+### Prompt H2 — Exemplo e documentação
+
+Adicionado smoke example standalone em `examples/sustainer_dsp`, inclusão no agregador `CV_DSP/Guitar/Pedals.hpp`, documentação no README dos pedais e IDs neutros para parâmetros de sustain/dinâmica.
+
+## Checklist da Fase H
+
+- [x] Criar `SustainerDSP.hpp`.
+- [x] Adicionar IDs de parâmetros para sustain, attack, release, ratio, makeup, max boost, detector mode e sidechain HPF.
+- [x] Adicionar descritores estáticos.
+- [x] Criar smoke example de nota decrescente, silêncio, ruído baixo e descritores.
+- [x] Verificar compilação/processamento do exemplo.
+
+
+## Semana/Fase I — Primeiro pedal de filtro expressivo
+
+### Prompt I1 — WahWahDSP manual
+
+Criado `WahWahDSP` como pedal independente do `PedalDriveCore`, usando `StateVariableFilter` em modo band-pass, suavização one-pole de expressão, taper musical, mapeamento logarítmico de frequência, Q dinâmico, ganho de band-pass, corpo seco, drive vintage leve opcional, output level e dry/wet mix.
+
+### Prompt I2 — Exemplo e integração
+
+Adicionado smoke example standalone em `examples/wah_wah_dsp`, inclusão no agregador `CV_DSP/Guitar/Pedals.hpp`, documentação no README dos pedais, integração no smoke unificado de pedalboard e IDs neutros para expressão/filtro wah.
+
+## Checklist da Fase I
+
+- [x] Criar `WahWahDSP.hpp`.
+- [x] Adicionar IDs de parâmetros para expression, expression source, min/max frequency, min/max Q, taper, filter drive, band-pass gain e dry gain.
+- [x] Adicionar descritores estáticos.
+- [x] Criar smoke example com sweep de expressão, silêncio e descritores.
+- [x] Verificar compilação/processamento do exemplo.
+
+
+## Semana/Fase J — Expression Engine determinístico
+
+### Prompt J1 — `cvdsp::control::ExpressionEngine`
+
+Criada a primeira versão do `ExpressionEngine` em `CV_DSP/Control`, fora da família de pedais, como gerador real-time-safe de controle `p` em `[0, 1]`. A análise usa envelope, energia rápida/lenta, detecção de transientes, densidade rítmica e BPM/PPQ do host para alternar entre estados `Idle`, `AttackAccent`, `Rhythmic` e `Vocal`, sem pitch tracking ou inferência neural nesta fase.
+
+### Prompt J2 — Integração com WahWahDSP
+
+Adicionado smoke example standalone em `examples/expression_engine_dsp` demonstrando o `ExpressionEngine` alimentando `WahWahDSP` por blocos, com validação de saída finita e expressão normalizada.
+
+## Checklist da Fase J
+
+- [x] Criar `CV_DSP/Control/ExpressionEngine.hpp`.
+- [x] Manter o motor independente de VST3/JUCE/CLAP e sem alocações no hot path.
+- [x] Implementar análise de envelope, transientes, densidade e grid rítmico via BPM/PPQ.
+- [x] Gerar estados determinísticos `Idle`, `AttackAccent`, `Rhythmic` e `Vocal`.
+- [x] Criar smoke example integrado com `WahWahDSP`.
+- [x] Verificar compilação/processamento do exemplo.
+
+
+## Semana/Fase K — Phaser clássico
+
+### Prompt K1 — Phaser genérico e wrapper de pedal
+
+Criado `CV_DSP/Effects/Phaser.hpp` como efeito genérico mono baseado em cascata de filtros all-pass de primeira ordem, varredura logarítmica por LFO, feedback limitado, estágios pares configuráveis e soma wet/dry 50/50 para cancelamentos móveis. Criado também `PhaserDSP` em `CV_DSP/Guitar/Pedals` para expor defaults e descritores de pedal.
+
+### Prompt K2 — Exemplo e integração
+
+Adicionado smoke example standalone em `examples/phaser_dsp`, inclusão no agregador `CV_DSP/Guitar/Pedals.hpp`, documentação no README dos pedais, integração no smoke unificado de pedalboard e IDs neutros para rate/depth/feedback/waveform de modulação.
+
+## Checklist da Fase K
+
+- [x] Criar `CV_DSP/Effects/Phaser.hpp`.
+- [x] Criar `CV_DSP/Guitar/Pedals/PhaserDSP.hpp`.
+- [x] Adicionar IDs de parâmetros para modulation rate/depth, feedback e LFO waveform.
+- [x] Adicionar descritores estáticos ao wrapper de pedal.
+- [x] Criar smoke example do Phaser genérico e do wrapper `PhaserDSP`.
+- [x] Verificar compilação/processamento do exemplo.
