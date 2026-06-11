@@ -79,6 +79,37 @@ void applyParameterGesture (VST3::VST3ParameterBridge& bridge,
     }
 }
 
+void drawBooleanToggle (VST3::VST3ParameterBridge& bridge,
+                        const Steinberg::Vst::ParameterInfo& info,
+                        const std::string& title,
+                        Steinberg::Vst::ParamValue normalizedValue,
+                        bool readOnly)
+{
+    const bool enabled = normalizedValue >= 0.5;
+    const ImVec4 onColor {0.10f, 0.55f, 0.28f, 1.00f};
+    const ImVec4 offColor {0.36f, 0.36f, 0.36f, 1.00f};
+    const ImVec4 hoverColor = enabled ? ImVec4 {0.13f, 0.66f, 0.34f, 1.00f}
+                                      : ImVec4 {0.45f, 0.45f, 0.45f, 1.00f};
+    const ImVec4 activeColor = enabled ? ImVec4 {0.08f, 0.44f, 0.22f, 1.00f}
+                                       : ImVec4 {0.28f, 0.28f, 0.28f, 1.00f};
+
+    ImGui::TextUnformatted (title.c_str ());
+    ImGui::SameLine (180.0f);
+
+    ImGui::PushStyleColor (ImGuiCol_Button, enabled ? onColor : offColor);
+    ImGui::PushStyleColor (ImGuiCol_ButtonHovered, hoverColor);
+    ImGui::PushStyleColor (ImGuiCol_ButtonActive, activeColor);
+
+    const char* buttonText = enabled ? "ON##toggle" : "OFF##toggle";
+    if (ImGui::Button (buttonText, ImVec2 (88.0f, 28.0f)) && !readOnly)
+        applyParameterGesture (bridge, info.id, enabled ? 0.0 : 1.0);
+
+    ImGui::PopStyleColor (3);
+
+    ImGui::SameLine ();
+    ImGui::TextDisabled (enabled ? "ativo" : "desligado");
+}
+
 void drawParameterControl (Steinberg::Vst::EditController& controller,
                            VST3::VST3ParameterBridge& bridge,
                            const Steinberg::Vst::ParameterInfo& info)
@@ -100,7 +131,11 @@ void drawParameterControl (Steinberg::Vst::EditController& controller,
 
     ImGui::PushID (static_cast<int> (info.id));
 
-    if (info.stepCount > 0)
+    if (info.stepCount == 1)
+    {
+        drawBooleanToggle (bridge, info, title, normalizedValue, readOnly);
+    }
+    else if (info.stepCount > 1)
     {
         const int stepCount = static_cast<int> (info.stepCount);
         int currentStep = static_cast<int> (std::lround (std::clamp (normalizedValue, 0.0, 1.0) * stepCount));
@@ -124,6 +159,9 @@ void drawParameterControl (Steinberg::Vst::EditController& controller,
             }
             ImGui::EndCombo ();
         }
+
+        ImGui::SameLine ();
+        ImGui::TextUnformatted (paramValueToString (controller, info.id, normalizedValue).c_str ());
     }
     else
     {
@@ -142,10 +180,10 @@ void drawParameterControl (Steinberg::Vst::EditController& controller,
             bridge.beginGesture (info.id);
         if (!readOnly && ImGui::IsItemDeactivatedAfterEdit ())
             bridge.endGesture (info.id);
-    }
 
-    ImGui::SameLine ();
-    ImGui::TextUnformatted (paramValueToString (controller, info.id, normalizedValue).c_str ());
+        ImGui::SameLine ();
+        ImGui::TextUnformatted (paramValueToString (controller, info.id, normalizedValue).c_str ());
+    }
 
     if (!readOnly)
     {
@@ -160,7 +198,7 @@ void drawParameterControl (Steinberg::Vst::EditController& controller,
         ImGui::EndDisabled ();
 }
 
-void drawParameterEditor (VST3::VST3ParameterBridge& bridge)
+void drawParameterEditor (VST3::VST3ParameterBridge& bridge, const std::string& editorTitle)
 {
     auto* controller = bridge.controller ();
     if (!controller)
@@ -176,7 +214,7 @@ void drawParameterEditor (VST3::VST3ParameterBridge& bridge)
         return;
     }
 
-    ImGui::TextUnformatted ("CV Compressor - Dear ImGui editor");
+    ImGui::TextUnformatted ((editorTitle + " - Dear ImGui editor").c_str ());
     ImGui::Separator ();
 
     for (int index = 0; index < parameterCount; ++index)
@@ -210,9 +248,11 @@ bool isMouseMessage (UINT message)
 }
 
 VST3ImGuiView::VST3ImGuiView (const Steinberg::ViewRect& initialSize,
-                              Steinberg::Vst::EditController* controller)
+                              Steinberg::Vst::EditController* controller,
+                              const char* editorTitle)
 : Steinberg::CPluginView (&initialSize)
 , parameterBridge_ (std::make_unique<VST3::VST3ParameterBridge> (controller))
+, editorTitle_ (editorTitle ? editorTitle : "CV_DSP")
 {
 }
 
@@ -458,8 +498,8 @@ void VST3ImGuiView::renderFrame ()
 
     ImGui::SetNextWindowPos (ImVec2 (16.0f, 16.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize (ImVec2 (620.0f, 360.0f), ImGuiCond_FirstUseEver);
-    ImGui::Begin ("CV Compressor");
-    drawParameterEditor (*parameterBridge_);
+    ImGui::Begin (editorTitle_.c_str ());
+    drawParameterEditor (*parameterBridge_, editorTitle_);
     ImGui::End ();
 
     openGLContext_->prepareFrame (rect.getWidth (), rect.getHeight ());
