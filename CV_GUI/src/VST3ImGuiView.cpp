@@ -217,12 +217,14 @@ void drawParameterEditor (VST3::VST3ParameterBridge& bridge, const std::string& 
     ImGui::TextUnformatted ((editorTitle + " - Dear ImGui editor").c_str ());
     ImGui::Separator ();
 
+    ImGui::PushItemWidth (std::min (560.0f, ImGui::GetContentRegionAvail ().x * 0.68f));
     for (int index = 0; index < parameterCount; ++index)
     {
         Steinberg::Vst::ParameterInfo info {};
         if (controller->getParameterInfo (index, info) == Steinberg::kResultTrue)
             drawParameterControl (*controller, bridge, info);
     }
+    ImGui::PopItemWidth ();
 
     ImGui::Separator ();
     ImGui::TextDisabled ("Automation: beginEdit / performEdit / endEdit via VST3ParameterBridge.");
@@ -321,12 +323,23 @@ Steinberg::tresult PLUGIN_API VST3ImGuiView::onFocus (Steinberg::TBool state)
 
 Steinberg::tresult PLUGIN_API VST3ImGuiView::canResize ()
 {
-    return Steinberg::kResultFalse;
+    return Steinberg::kResultTrue;
 }
 
-Steinberg::tresult PLUGIN_API VST3ImGuiView::checkSizeConstraint (Steinberg::ViewRect* /*rect*/)
+Steinberg::tresult PLUGIN_API VST3ImGuiView::checkSizeConstraint (Steinberg::ViewRect* rect)
 {
-    return Steinberg::kResultFalse;
+    if (!rect)
+        return Steinberg::kResultFalse;
+
+    constexpr Steinberg::int32 minWidth = 520;
+    constexpr Steinberg::int32 minHeight = 360;
+
+    if (rect->getWidth () < minWidth)
+        rect->right = rect->left + minWidth;
+    if (rect->getHeight () < minHeight)
+        rect->bottom = rect->top + minHeight;
+
+    return Steinberg::kResultTrue;
 }
 
 VST3::VST3ParameterBridge& VST3ImGuiView::parameterBridge () noexcept
