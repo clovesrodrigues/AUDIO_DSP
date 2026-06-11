@@ -19,6 +19,15 @@ c++ -std=c++20 -Wall -Wextra -Wpedantic -I. examples/spectral_noise_reducer_dsp/
 c++ -std=c++20 -Wall -Wextra -Wpedantic -I. examples/guitar_pedalboard_dsp/guitar_pedalboard_smoke.cpp -o /tmp/guitar_pedalboard_smoke && /tmp/guitar_pedalboard_smoke
 ```
 
+O redutor de ruido tambem possui um benchmark CMake leve para comparar custo de
+CPU entre mudancas de codigo sem abrir a DAW:
+
+```bash
+cmake -S examples/spectral_noise_reducer_dsp -B /tmp/spectral_noise_reducer_dsp_build
+cmake --build /tmp/spectral_noise_reducer_dsp_build --target realtime_noise_reducer_benchmark
+/tmp/spectral_noise_reducer_dsp_build/realtime_noise_reducer_benchmark
+```
+
 ## 2. Pedais VST3
 
 Os pedais ficam em `examples/pedais/` e podem ser compilados em lote:
@@ -61,7 +70,17 @@ Fluxo de uso esperado na DAW:
 3. Ligar **Perceber Ruído** para capturar o perfil.
 4. Desligar **Perceber Ruído**.
 5. Ligar **Subtrair Ruídos** e gravar.
-6. Usar **Limpar Perfil** quando trocar cabo, captador, sala, interface ou ganho.
+6. Ligar **Perceber Ruído** novamente quando trocar cabo, captador, sala,
+   interface ou ganho; isso limpa o perfil anterior e captura um perfil novo.
+
+Checklist recomendado no REAPER depois de instalar uma build nova:
+
+- Re-escanear o VST3 para garantir que a DAW carregou a DLL/SO mais recente.
+- Conferir no painel de FX se o plugin informa **1024 spls** de latência/PDC.
+- Duplicar uma faixa com o mesmo áudio e verificar se não aparece voz robótica
+  por desalinhamento de fase entre faixa processada e rota paralela.
+- Medir CPU com **Perceber Ruído** e **Subtrair Ruídos** desligados; nesse estado
+  o VST3 usa pass-through de bloco.
 
 ## 4. GUI / fallback
 
