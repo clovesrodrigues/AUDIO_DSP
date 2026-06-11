@@ -46,6 +46,19 @@ cmake --build build/examples/spectral_noise_reducer_dsp
 ./build/examples/spectral_noise_reducer_dsp/spectral_noise_reducer_smoke
 ```
 
+
+## Benchmark leve de CPU
+
+O exemplo tambem fornece `realtime_noise_reducer_benchmark`, que mede o core
+`RealtimeNoiseReducer<float, 1024>` em 1, 4 e 10 instancias independentes. Ele
+nao substitui a medicao no REAPER, mas ajuda a comparar mudancas de codigo sem
+abrir a DAW e confirma que perfis/estados continuam isolados por instancia.
+
+```bash
+cmake --build build/examples/spectral_noise_reducer_dsp --target realtime_noise_reducer_benchmark
+./build/examples/spectral_noise_reducer_dsp/realtime_noise_reducer_benchmark
+```
+
 ## Build direto com compilador
 
 ```bash
