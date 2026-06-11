@@ -62,18 +62,18 @@ protected:
     RoomReverb roomReverb_ {};
     ParameterManager parameters_ {};
     double sampleRate_ {44100.0};
-    float tone_ {0.55f};
+    float tone_ {0.38f};
     float attackMs_ {3.0f};
     float velocitySensitivity_ {0.75f};
     float outputGainDb_ {-6.0f};
-    float compression_ {0.35f};
-    float drive_ {0.08f};
+    float compression_ {0.15f};
+    float drive_ {0.0f};
     float bassGainDb_ {0.0f};
     float midGainDb_ {0.0f};
     float trebleGainDb_ {0.0f};
-    float fingerNoise_ {0.18f};
-    float humanize_ {0.18f};
-    float roomMix_ {0.12f};
+    float fingerNoise_ {0.0f};
+    float humanize_ {0.04f};
+    float roomMix_ {0.0f};
 };
 
 } // namespace CV

@@ -90,7 +90,7 @@ tresult PLUGIN_API CVBassFingerLiteProcessor::setupProcessing (Vst::ProcessSetup
     roomReverb_.setDecayTime (0.42f);
     roomReverb_.setDamping (0.68f);
     roomReverb_.setDry (1.0f);
-    roomReverb_.setWet (roomMix_ * 0.35f);
+    roomReverb_.setWet (roomMix_ * 0.22f);
     midiEventCount_ = 0;
     return AudioEffect::setupProcessing (newSetup);
 }
@@ -154,18 +154,18 @@ tresult PLUGIN_API CVBassFingerLiteProcessor::setState (IBStream* state)
         return kResultFalse;
 
     IBStreamer streamer (state, kLittleEndian);
-    float tone = 0.55f;
+    float tone = 0.38f;
     float attack = 3.0f;
     float velocitySensitivity = 0.75f;
     float outputGain = -6.0f;
-    float compression = 0.35f;
-    float drive = 0.08f;
+    float compression = 0.15f;
+    float drive = 0.0f;
     float bassGain = 0.0f;
     float midGain = 0.0f;
     float trebleGain = 0.0f;
-    float fingerNoise = 0.18f;
-    float humanize = 0.18f;
-    float roomMix = 0.12f;
+    float fingerNoise = 0.0f;
+    float humanize = 0.04f;
+    float roomMix = 0.0f;
     if (!streamer.readFloat (tone) || !streamer.readFloat (attack) ||
         !streamer.readFloat (velocitySensitivity) || !streamer.readFloat (outputGain))
         return kResultFalse;
@@ -215,18 +215,18 @@ tresult PLUGIN_API CVBassFingerLiteProcessor::getState (IBStream* state)
 void CVBassFingerLiteProcessor::registerParameters () noexcept
 {
     using namespace cvdsp::manager;
-    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassTone, "Tone", "Tone", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.55f, 0.0f, 1.0f}, nullptr, 0, "tone", "%", "Bass", 2), ParameterSmoothingMode::Linear);
+    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassTone, "Tone", "Tone", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.38f, 0.0f, 1.0f}, nullptr, 0, "tone", "%", "Bass", 2), ParameterSmoothingMode::Linear);
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassAttack, "Attack", "Attack", ParameterUnit::Milliseconds, ParameterScale::Linear, kParamFlags, {0.5f, 40.0f, 3.0f, 0.0f, 1.0f}, nullptr, 0, "attack", "ms", "Bass", 2), ParameterSmoothingMode::Linear);
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassVelocitySensitivity, "Velocity Sens", "Velocity Sensitivity", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.75f, 0.0f, 1.0f}, nullptr, 0, "velocity_sensitivity", "%", "Bass", 2), ParameterSmoothingMode::Linear);
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassOutputGain, "Output", "Output Gain", ParameterUnit::Decibels, ParameterScale::Decibel, kParamFlags, {-24.0f, 6.0f, -6.0f, 0.0f, 1.0f}, nullptr, 0, "output_gain", "dB", "Output", 2), ParameterSmoothingMode::Linear);
-    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassCompression, "Compression", "Compression", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.35f, 0.0f, 1.0f}, nullptr, 0, "compression", "%", "Mix", 2), ParameterSmoothingMode::Linear);
-    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassDrive, "Drive", "Drive", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.08f, 0.0f, 1.0f}, nullptr, 0, "drive", "%", "Mix", 2), ParameterSmoothingMode::Linear);
+    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassCompression, "Compression", "Compression", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.15f, 0.0f, 1.0f}, nullptr, 0, "compression", "%", "Mix", 2), ParameterSmoothingMode::Linear);
+    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassDrive, "Drive", "Drive", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "drive", "%", "Mix", 2), ParameterSmoothingMode::Linear);
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassLowEQ, "Bass", "Bass EQ", ParameterUnit::Decibels, ParameterScale::Decibel, kParamFlags, {-12.0f, 12.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "bass_eq", "dB", "EQ", 2), ParameterSmoothingMode::Linear);
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassMidEQ, "Mid", "Mid EQ", ParameterUnit::Decibels, ParameterScale::Decibel, kParamFlags, {-12.0f, 12.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "mid_eq", "dB", "EQ", 2), ParameterSmoothingMode::Linear);
     (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassHighEQ, "Treble", "Treble EQ", ParameterUnit::Decibels, ParameterScale::Decibel, kParamFlags, {-12.0f, 12.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "treble_eq", "dB", "EQ", 2), ParameterSmoothingMode::Linear);
-    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassFingerNoise, "Finger Noise", "Finger Noise", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.18f, 0.0f, 1.0f}, nullptr, 0, "finger_noise", "%", "Humanize", 2), ParameterSmoothingMode::Linear);
-    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassHumanize, "Humanize", "Humanize", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.18f, 0.0f, 1.0f}, nullptr, 0, "humanize", "%", "Humanize", 2), ParameterSmoothingMode::Linear);
-    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassRoom, "Room", "Room", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.12f, 0.0f, 1.0f}, nullptr, 0, "room", "%", "Room", 2), ParameterSmoothingMode::Linear);
+    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassFingerNoise, "Finger Noise", "Finger Noise", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "finger_noise", "%", "Humanize", 2), ParameterSmoothingMode::Linear);
+    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassHumanize, "Humanize", "Humanize", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.04f, 0.0f, 1.0f}, nullptr, 0, "humanize", "%", "Humanize", 2), ParameterSmoothingMode::Linear);
+    (void)parameters_.registerParameter (ParameterDescriptor<float> (kParamBassRoom, "Room", "Room", ParameterUnit::Percent, ParameterScale::Percentage, kParamFlags, {0.0f, 1.0f, 0.0f, 0.0f, 1.0f}, nullptr, 0, "room", "%", "Room", 2), ParameterSmoothingMode::Linear);
 }
 
 void CVBassFingerLiteProcessor::applyParametersToDSP () noexcept
@@ -255,7 +255,7 @@ void CVBassFingerLiteProcessor::applyParametersToDSP () noexcept
     bassVoice_.setFingerNoise (fingerNoise_);
     bassVoice_.setHumanize (humanize_);
     bassVoice_.setOutputGainDb (outputGainDb_);
-    roomReverb_.setWet (roomMix_ * 0.35f);
+    roomReverb_.setWet (roomMix_ * 0.22f);
 }
 
 std::size_t CVBassFingerLiteProcessor::collectMidiEvents (Vst::IEventList* inputEvents, int32 numSamples) noexcept

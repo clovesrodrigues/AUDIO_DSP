@@ -29,3 +29,7 @@ If the instrument is playable in Reaper and CPU use is acceptable, the next cycl
 - measured CPU profiling and optimization.
 
 Do not add all of these at once.
+
+## Post-cycle correction
+
+After the first listening pass, the clean default sound was prioritized over the more obvious synthetic effects. Drive, finger noise, and room should remain optional controls, not mandatory defaults.

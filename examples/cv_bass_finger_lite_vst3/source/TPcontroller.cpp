@@ -12,18 +12,18 @@ using namespace Steinberg;
 
 namespace CV {
 namespace {
-constexpr double kToneDefault = 0.55;
+constexpr double kToneDefault = 0.38;
 constexpr double kAttackDefault = 3.0;
 constexpr double kVelocitySensitivityDefault = 0.75;
 constexpr double kOutputGainDefault = -6.0;
-constexpr double kCompressionDefault = 0.35;
-constexpr double kDriveDefault = 0.08;
+constexpr double kCompressionDefault = 0.15;
+constexpr double kDriveDefault = 0.0;
 constexpr double kBassEQDefault = 0.0;
 constexpr double kMidEQDefault = 0.0;
 constexpr double kTrebleEQDefault = 0.0;
-constexpr double kFingerNoiseDefault = 0.18;
-constexpr double kHumanizeDefault = 0.18;
-constexpr double kRoomDefault = 0.12;
+constexpr double kFingerNoiseDefault = 0.0;
+constexpr double kHumanizeDefault = 0.04;
+constexpr double kRoomDefault = 0.0;
 
 Vst::ParamValue normalize (double plain, double minPlain, double maxPlain)
 {

@@ -18,7 +18,7 @@ MIDI In -> Mono Note Tracker -> Bass Finger Voice -> Dynamic Filter -> Drive -> 
 
 ## Current status
 
-Stage 9 closure and usage guide. The plugin translates VST3 note events into neutral CV_DSP MIDI events, tracks a fixed-capacity monophonic last-note-priority stack, renders a low-CPU bass voice made from a triangle oscillator, sine sub oscillator, amplitude ADSR, velocity-aware gain, dynamic low-pass tone filter, light drive, compressor, 3-band EQ, subtle attack/release finger noise, and deterministic humanization, then can add a short low-CPU room ambience at the output.
+Post-cycle sound triage. The plugin still follows the Prompt 9 closure plan, but the default sound has been corrected to start cleaner and less synthetic: drive, finger noise, and room are off by default, compression and humanization are conservative, and the tone filter is warmer to avoid the harsh short-circuit character reported during listening.
 
 ## Parameters
 
@@ -48,18 +48,22 @@ This example is at **Prompt 9**, the final prompt of the first CV Bass Finger Li
 5. Keep the part monophonic for the intended finger-bass behavior.
 6. Use velocity variation in the MIDI item before reaching for more effects.
 7. Use `Tone`, `Velocity Sensitivity`, `Finger Noise`, and `Humanize` as the main realism controls.
-8. Keep `Room` low for bass parts; the default is intended as a short ambience, not a large reverb.
+8. Keep `Drive`, `Finger Noise`, and `Room` at zero first; only add them after the clean bass tone is working in the mix.
 
 ## Safe default sound-shaping range
 
-- `Tone`: 0.45 to 0.70 for a usable finger-bass range.
-- `Attack`: 1.5 ms to 6 ms for most keyboard/sequenced bass lines.
-- `Velocity Sensitivity`: 0.60 to 0.90 when the MIDI part has meaningful velocity variation.
-- `Compression`: 0.25 to 0.50 for stable level without crushing the transient.
-- `Drive`: 0.05 to 0.18 for subtle harmonic weight.
-- `Finger Noise`: 0.10 to 0.30 for audible but not exaggerated articulation.
-- `Humanize`: 0.10 to 0.25 for small movement without random-sounding notes.
-- `Room`: 0.00 to 0.18 for bass; use higher values only for special effect.
+- `Tone`: start around 0.35 to 0.45; raise only if the bass is too dark.
+- `Attack`: 2 ms to 8 ms for most keyboard/sequenced bass lines.
+- `Velocity Sensitivity`: 0.50 to 0.80 when the MIDI part has meaningful velocity variation.
+- `Compression`: 0.10 to 0.30 for stable level without crushing the transient.
+- `Drive`: start at 0.00; try 0.03 to 0.10 only if the clean tone needs harmonic weight.
+- `Finger Noise`: start at 0.00; use 0.02 to 0.08 for a subtle attack detail.
+- `Humanize`: 0.00 to 0.10 for small movement without random-sounding notes.
+- `Room`: start at 0.00 for bass; keep below 0.10 unless it is a special effect.
+
+## Listening correction
+
+The first completed pass was too synthetic and could sound like electrical crackle when `Finger Noise`, `Drive`, and ambience were active by default. The current defaults intentionally prioritize a cleaner direct bass tone over obvious effects. Treat noise, drive, and room as optional mix controls, not as part of the base sound.
 
 ## Stop point for this cycle
 

@@ -65,7 +65,7 @@ public:
             static_cast<T>(120));
 
         toneFilter_.prepare(sampleRate_, cvdsp::filters::SVFMode::LowPass);
-        toneFilter_.setResonance(static_cast<T>(0.72));
+        toneFilter_.setResonance(static_cast<T>(0.42));
 
         compressor_.prepare(sampleRate_);
         compressor_.setAttackMs(static_cast<T>(8));
@@ -115,12 +115,12 @@ public:
     {
         currentNote_ = static_cast<std::uint8_t>(std::min<std::uint8_t>(note, 127));
         normalizedVelocity_ = std::clamp(velocity, static_cast<T>(0), static_cast<T>(1));
-        const T randomGain = nextRandomBipolar() * humanize_ * static_cast<T>(0.035);
-        const T randomCutoff = nextRandomBipolar() * humanize_ * static_cast<T>(420);
+        const T randomGain = nextRandomBipolar() * humanize_ * static_cast<T>(0.018);
+        const T randomCutoff = nextRandomBipolar() * humanize_ * static_cast<T>(120);
         humanizedGain_ = static_cast<T>(1) + randomGain;
         humanizedCutoffOffset_ = randomCutoff;
         velocityGain_ = velocityToGain(normalizedVelocity_) * humanizedGain_;
-        attackNoiseEnvelope_ = fingerNoise_ * (static_cast<T>(0.15) + (normalizedVelocity_ * static_cast<T>(0.85)));
+        attackNoiseEnvelope_ = fingerNoise_ * (static_cast<T>(0.10) + (normalizedVelocity_ * static_cast<T>(0.55)));
         frequency_ = midiNoteToFrequency(currentNote_);
         updateOscillatorFrequencies();
         updateToneFilter();
@@ -135,7 +135,7 @@ public:
     {
         releaseNoiseEnvelope_ = std::max(
             releaseNoiseEnvelope_,
-            fingerNoise_ * (static_cast<T>(0.08) + (normalizedVelocity_ * static_cast<T>(0.28))));
+            fingerNoise_ * (static_cast<T>(0.04) + (normalizedVelocity_ * static_cast<T>(0.14))));
         amplitudeEnvelope_.noteOff();
     }
 
@@ -153,7 +153,7 @@ public:
 
         const T main = mainOscillator_.process();
         const T sub = subOscillator_.process();
-        const T mixed = (main * static_cast<T>(0.78)) + (sub * static_cast<T>(0.22));
+        const T mixed = (main * static_cast<T>(0.58)) + (sub * static_cast<T>(0.42));
         const T filtered = toneFilter_.process(mixed);
         const T enveloped = (filtered * envelope * velocityGain_) + noise;
         const T driven = applyDrive(enveloped);
@@ -256,21 +256,21 @@ private:
 
     void updateToneFilter() noexcept
     {
-        const T baseCutoff = static_cast<T>(280) + (tone_ * tone_ * static_cast<T>(3300));
-        const T velocityLift = normalizedVelocity_ * velocitySensitivity_ * static_cast<T>(2200);
+        const T baseCutoff = static_cast<T>(140) + (tone_ * tone_ * static_cast<T>(1600));
+        const T velocityLift = normalizedVelocity_ * velocitySensitivity_ * static_cast<T>(900);
         toneFilter_.setCutoff(baseCutoff + velocityLift + humanizedCutoffOffset_);
     }
 
     void updateNoiseDecays() noexcept
     {
-        attackNoiseDecay_ = std::exp(static_cast<T>(-1) / (std::max(sampleRate_, static_cast<T>(1)) * static_cast<T>(0.012)));
-        releaseNoiseDecay_ = std::exp(static_cast<T>(-1) / (std::max(sampleRate_, static_cast<T>(1)) * static_cast<T>(0.035)));
+        attackNoiseDecay_ = std::exp(static_cast<T>(-1) / (std::max(sampleRate_, static_cast<T>(1)) * static_cast<T>(0.006)));
+        releaseNoiseDecay_ = std::exp(static_cast<T>(-1) / (std::max(sampleRate_, static_cast<T>(1)) * static_cast<T>(0.018)));
     }
 
     [[nodiscard]] T processFingerNoise() noexcept
     {
-        const T attackNoise = nextRandomBipolar() * attackNoiseEnvelope_ * static_cast<T>(0.08);
-        const T releaseNoise = nextRandomBipolar() * releaseNoiseEnvelope_ * static_cast<T>(0.045);
+        const T attackNoise = nextRandomBipolar() * attackNoiseEnvelope_ * static_cast<T>(0.018);
+        const T releaseNoise = nextRandomBipolar() * releaseNoiseEnvelope_ * static_cast<T>(0.010);
 
         attackNoiseEnvelope_ *= attackNoiseDecay_;
         releaseNoiseEnvelope_ *= releaseNoiseDecay_;
@@ -346,19 +346,19 @@ private:
     T frequency_ = static_cast<T>(55);
     T velocityGain_ = static_cast<T>(0);
     T normalizedVelocity_ = static_cast<T>(0);
-    T tone_ = static_cast<T>(0.55);
+    T tone_ = static_cast<T>(0.38);
     T velocitySensitivity_ = static_cast<T>(0.75);
     T attackMs_ = static_cast<T>(3);
-    T fingerNoise_ = static_cast<T>(0.18);
-    T humanize_ = static_cast<T>(0.18);
+    T fingerNoise_ = static_cast<T>(0);
+    T humanize_ = static_cast<T>(0.04);
     T humanizedGain_ = static_cast<T>(1);
     T humanizedCutoffOffset_ = static_cast<T>(0);
     T attackNoiseEnvelope_ = static_cast<T>(0);
     T releaseNoiseEnvelope_ = static_cast<T>(0);
     T attackNoiseDecay_ = static_cast<T>(0.995);
     T releaseNoiseDecay_ = static_cast<T>(0.998);
-    T compression_ = static_cast<T>(0.35);
-    T drive_ = static_cast<T>(0.08);
+    T compression_ = static_cast<T>(0.15);
+    T drive_ = static_cast<T>(0);
     T bassGainDb_ = static_cast<T>(0);
     T midGainDb_ = static_cast<T>(0);
     T trebleGainDb_ = static_cast<T>(0);

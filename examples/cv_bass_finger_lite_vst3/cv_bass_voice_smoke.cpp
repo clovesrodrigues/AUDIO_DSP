@@ -12,16 +12,16 @@ int main()
     cvdsp::synthesis::bass::BassFingerVoice<float> voice;
     voice.prepare(48000.0f);
 
-    voice.setTone(0.65f);
+    voice.setTone(0.40f);
     voice.setAttackMs(2.0f);
     voice.setVelocitySensitivity(1.0f);
-    voice.setCompression(0.35f);
-    voice.setDrive(0.1f);
+    voice.setCompression(0.15f);
+    voice.setDrive(0.0f);
     voice.setBassGainDb(2.0f);
     voice.setMidGainDb(1.0f);
     voice.setTrebleGainDb(-1.0f);
-    voice.setFingerNoise(0.25f);
-    voice.setHumanize(0.2f);
+    voice.setFingerNoise(0.0f);
+    voice.setHumanize(0.04f);
     voice.setOutputGainDb(-6.0f);
 
     voice.noteOn(40, 0.8f, false);
@@ -57,7 +57,7 @@ int main()
     roomContext.numChannels = 2;
     cvdsp::reverb::RoomReverb<float> room;
     room.prepare(roomContext);
-    room.setWet(0.08f);
+    room.setWet(0.0f);
     room.processBlock(roomBuffer);
 
     voice.noteOff();
