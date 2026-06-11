@@ -37,6 +37,10 @@ Toggling either switch also flushes only the overlap/latency history, not the
 learned profile, so old FFT tails cannot leak into the next capture/reduction
 state.
 
+The processor reports `1024` samples of plugin latency compensation (PDC), matching
+the realtime FFT size, so REAPER can keep duplicated tracks and parallel routes
+aligned instead of mixing a delayed spectral path with an uncompensated dry path.
+
 ## CV_GUI editor and fallback
 
 The project enables `SPECTRAL_NOISE_REDUCER_VST3_ENABLE_CV_GUI` by default on

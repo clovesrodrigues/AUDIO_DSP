@@ -63,6 +63,11 @@ tresult PLUGIN_API SpectralNoiseReducerVST3Processor::canProcessSampleSize (int3
     return symbolicSampleSize == Vst::kSample32 ? kResultTrue : kResultFalse;
 }
 
+uint32 PLUGIN_API SpectralNoiseReducerVST3Processor::getLatencySamples ()
+{
+    return static_cast<uint32> (DSP::kFFTSize);
+}
+
 tresult PLUGIN_API SpectralNoiseReducerVST3Processor::process (Vst::ProcessData& data)
 {
     if (data.symbolicSampleSize != Vst::kSample32)
