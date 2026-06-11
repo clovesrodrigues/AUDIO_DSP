@@ -74,5 +74,5 @@ int main()
             return 4;
     }
 
-    return descriptors.size() == 13 ? 0 : 5;
+    return descriptors.size() == 15 ? 0 : 5;
 }

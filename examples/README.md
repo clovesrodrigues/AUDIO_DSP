@@ -28,6 +28,13 @@ cmake --build /tmp/spectral_noise_reducer_dsp_build --target realtime_noise_redu
 /tmp/spectral_noise_reducer_dsp_build/realtime_noise_reducer_benchmark
 ```
 
+Para validar todos os smoke examples novos e o benchmark spectral em um unico
+comando:
+
+```bash
+examples/run_new_dsp_smokes.sh
+```
+
 ## 2. Pedais VST3
 
 Os pedais ficam em `examples/pedais/` e podem ser compilados em lote:
