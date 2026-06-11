@@ -11,9 +11,19 @@
 #include "pluginterfaces/vst/ivstmidicontrollers.h"
 
 #include <algorithm>
-#include <array>
+#include <cmath>
 #include <filesystem>
 #include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__APPLE__) || defined(__linux__)
+#include <dlfcn.h>
+#endif
 
 #if CV_GM_INSTRUMENT_LITE_ENABLE_CV_GUI
 #include "CV_GUI/VST3ImGuiView.hpp"
@@ -32,41 +42,6 @@ Vst::ParamValue normalizeEq (double plainDb)
     return (plainDb + 12.0) / 24.0;
 }
 
-constexpr std::array<const char*, 128> kGeneralMidiPresetNames {{
-    "000 Acoustic Grand Piano", "001 Bright Acoustic Piano", "002 Electric Grand Piano", "003 Honky-tonk Piano",
-    "004 Electric Piano 1", "005 Electric Piano 2", "006 Harpsichord", "007 Clavinet",
-    "008 Celesta", "009 Glockenspiel", "010 Music Box", "011 Vibraphone",
-    "012 Marimba", "013 Xylophone", "014 Tubular Bells", "015 Dulcimer",
-    "016 Drawbar Organ", "017 Percussive Organ", "018 Rock Organ", "019 Church Organ",
-    "020 Reed Organ", "021 Accordion", "022 Harmonica", "023 Tango Accordion",
-    "024 Acoustic Guitar Nylon", "025 Acoustic Guitar Steel", "026 Electric Guitar Jazz", "027 Electric Guitar Clean",
-    "028 Electric Guitar Muted", "029 Overdriven Guitar", "030 Distortion Guitar", "031 Guitar Harmonics",
-    "032 Acoustic Bass", "033 Electric Bass Finger", "034 Electric Bass Pick", "035 Fretless Bass",
-    "036 Slap Bass 1", "037 Slap Bass 2", "038 Synth Bass 1", "039 Synth Bass 2",
-    "040 Violin", "041 Viola", "042 Cello", "043 Contrabass",
-    "044 Tremolo Strings", "045 Pizzicato Strings", "046 Orchestral Harp", "047 Timpani",
-    "048 String Ensemble 1", "049 String Ensemble 2", "050 Synth Strings 1", "051 Synth Strings 2",
-    "052 Choir Aahs", "053 Voice Oohs", "054 Synth Voice", "055 Orchestra Hit",
-    "056 Trumpet", "057 Trombone", "058 Tuba", "059 Muted Trumpet",
-    "060 French Horn", "061 Brass Section", "062 Synth Brass 1", "063 Synth Brass 2",
-    "064 Soprano Sax", "065 Alto Sax", "066 Tenor Sax", "067 Baritone Sax",
-    "068 Oboe", "069 English Horn", "070 Bassoon", "071 Clarinet",
-    "072 Piccolo", "073 Flute", "074 Recorder", "075 Pan Flute",
-    "076 Blown Bottle", "077 Shakuhachi", "078 Whistle", "079 Ocarina",
-    "080 Lead 1 Square", "081 Lead 2 Sawtooth", "082 Lead 3 Calliope", "083 Lead 4 Chiff",
-    "084 Lead 5 Charang", "085 Lead 6 Voice", "086 Lead 7 Fifths", "087 Lead 8 Bass + Lead",
-    "088 Pad 1 New Age", "089 Pad 2 Warm", "090 Pad 3 Polysynth", "091 Pad 4 Choir",
-    "092 Pad 5 Bowed", "093 Pad 6 Metallic", "094 Pad 7 Halo", "095 Pad 8 Sweep",
-    "096 FX 1 Rain", "097 FX 2 Soundtrack", "098 FX 3 Crystal", "099 FX 4 Atmosphere",
-    "100 FX 5 Brightness", "101 FX 6 Goblins", "102 FX 7 Echoes", "103 FX 8 Sci-fi",
-    "104 Sitar", "105 Banjo", "106 Shamisen", "107 Koto",
-    "108 Kalimba", "109 Bagpipe", "110 Fiddle", "111 Shanai",
-    "112 Tinkle Bell", "113 Agogo", "114 Steel Drums", "115 Woodblock",
-    "116 Taiko Drum", "117 Melodic Tom", "118 Synth Drum", "119 Reverse Cymbal",
-    "120 Guitar Fret Noise", "121 Breath Noise", "122 Seashore", "123 Bird Tweet",
-    "124 Telephone Ring", "125 Helicopter", "126 Applause", "127 Gunshot"
-}};
-
 void copyAsciiToString128 (const std::string& text, Vst::String128 destination)
 {
     std::fill_n (destination, 128, 0);
@@ -82,9 +57,66 @@ void appendAsciiString (Vst::StringListParameter& parameter, const std::string& 
     parameter.appendString (value);
 }
 
+std::size_t normalizedToListIndex (Vst::ParamValue normalized, std::size_t itemCount) noexcept
+{
+    if (itemCount == 0)
+        return 0;
+
+    const auto maxIndex = static_cast<double> (itemCount - 1);
+    const auto index = static_cast<std::size_t> (std::lround (std::clamp (normalized, 0.0, 1.0) * maxIndex));
+    return std::min (index, itemCount - 1);
+}
+
+Vst::ParamValue listIndexToNormalized (std::size_t index, std::size_t itemCount) noexcept
+{
+    if (itemCount <= 1)
+        return 0.0;
+
+    return static_cast<double> (std::min (index, itemCount - 1)) / static_cast<double> (itemCount - 1);
+}
+
+std::filesystem::path resolvePluginModulePath ()
+{
+#if defined(_WIN32)
+    HMODULE moduleHandle = nullptr;
+    const auto flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+    if (GetModuleHandleExA (flags, reinterpret_cast<LPCSTR> (&resolvePluginModulePath), &moduleHandle) && moduleHandle)
+    {
+        char modulePath[MAX_PATH] {};
+        const DWORD length = GetModuleFileNameA (moduleHandle, modulePath, MAX_PATH);
+        if (length > 0)
+            return std::filesystem::path (modulePath);
+    }
+#elif defined(__APPLE__) || defined(__linux__)
+    Dl_info info {};
+    if (dladdr (reinterpret_cast<void*> (&resolvePluginModulePath), &info) && info.dli_fname)
+        return std::filesystem::path (info.dli_fname);
+#endif
+
+    return std::filesystem::current_path() / "CV_GM_Instrument_Lite.vst3";
+}
+
 std::filesystem::path resolveControllerSoundFontFolder ()
 {
-    return SoundFontFolderScanner::resolveSiblingSoundFontsFolder (std::filesystem::current_path() / "CV_GM_Instrument_Lite.vst3");
+    return SoundFontFolderScanner::resolveSiblingSoundFontsFolder (resolvePluginModulePath ());
+}
+
+Vst::StringListParameter* getStringListParameter (Vst::EditController& controller, Vst::ParamID paramID)
+{
+    return static_cast<Vst::StringListParameter*> (controller.getParameterObject (paramID));
+}
+
+void replaceStringList (Vst::StringListParameter& parameter, const std::vector<std::string>& labels)
+{
+    parameter.clear ();
+    if (labels.empty())
+    {
+        appendAsciiString (parameter, "<empty>");
+        return;
+    }
+
+    for (const auto& label : labels)
+        appendAsciiString (parameter, label);
 }
 } // namespace
 
@@ -95,19 +127,11 @@ tresult PLUGIN_API CVGMInstrumentLiteController::initialize (FUnknown* context)
         return result;
 
     auto* soundFontParameter = new Vst::StringListParameter (STR16 ("SoundFont"), kParamGMSoundFont);
-    const auto soundFonts = SoundFontFolderScanner::scanSoundFonts (resolveControllerSoundFontFolder ());
-    if (soundFonts.empty())
-        appendAsciiString (*soundFontParameter, "No .sf2 found in CV_GM_Instrument_Lite_SoundFonts");
-    else
-    {
-        for (const auto& soundFont : soundFonts)
-            appendAsciiString (*soundFontParameter, soundFont.fileName);
-    }
+    appendAsciiString (*soundFontParameter, "Scanning CV_GM_Instrument_Lite_SoundFonts...");
     parameters.addParameter (soundFontParameter);
 
     auto* instrumentParameter = new Vst::StringListParameter (STR16 ("Instrument"), kParamGMInstrument);
-    for (const auto* presetName : kGeneralMidiPresetNames)
-        appendAsciiString (*instrumentParameter, presetName);
+    appendAsciiString (*instrumentParameter, "Select a SoundFont first");
     parameters.addParameter (instrumentParameter);
 
     parameters.addParameter (new Vst::RangeParameter (STR16 ("Rescan"), kParamGMRescan, STR16 (""), 0.0, 1.0, 0.0, 1));
@@ -117,7 +141,114 @@ tresult PLUGIN_API CVGMInstrumentLiteController::initialize (FUnknown* context)
     parameters.addParameter (new Vst::RangeParameter (STR16 ("Treble"), kParamGMTreble, STR16 ("dB"), -12.0, 12.0, kEqDefault));
     parameters.addParameter (new Vst::RangeParameter (STR16 ("Room"), kParamGMRoom, STR16 ("%"), 0.0, 1.0, kRoomDefault));
 
+    initializeDynamicLists ();
+
     return result;
+}
+
+void CVGMInstrumentLiteController::initializeDynamicLists ()
+{
+    soundFontsFolder_ = resolveControllerSoundFontFolder ();
+    previewEngine_.prepare (44100.0);
+    refreshSoundFontList ();
+    refreshPresetList ();
+}
+
+void CVGMInstrumentLiteController::refreshSoundFontList ()
+{
+    const auto currentIndex = selectedSoundFontIndexFromParameter ();
+    const auto currentFileName = currentIndex < soundFontFiles_.size() ? soundFontFiles_[currentIndex].fileName : std::string {};
+
+    soundFontsFolder_ = resolveControllerSoundFontFolder ();
+    soundFontFiles_ = SoundFontFolderScanner::scanSoundFonts (soundFontsFolder_);
+    rebuildSoundFontParameterStrings ();
+
+    if (soundFontFiles_.empty())
+    {
+        EditControllerEx1::setParamNormalized (kParamGMSoundFont, 0.0);
+        return;
+    }
+
+    auto selectedIndex = std::min (currentIndex, soundFontFiles_.size() - 1);
+    if (!currentFileName.empty())
+    {
+        for (std::size_t index = 0; index < soundFontFiles_.size(); ++index)
+        {
+            if (soundFontFiles_[index].fileName == currentFileName)
+            {
+                selectedIndex = index;
+                break;
+            }
+        }
+    }
+
+    EditControllerEx1::setParamNormalized (kParamGMSoundFont, listIndexToNormalized (selectedIndex, soundFontFiles_.size()));
+}
+
+void CVGMInstrumentLiteController::refreshPresetList ()
+{
+    const auto soundFontIndex = selectedSoundFontIndexFromParameter ();
+    if (soundFontFiles_.empty() || soundFontIndex >= soundFontFiles_.size())
+    {
+        previewEngine_.unload ();
+        rebuildInstrumentParameterStrings ();
+        EditControllerEx1::setParamNormalized (kParamGMInstrument, 0.0);
+        return;
+    }
+
+    if (!previewEngine_.isLoaded() || previewEngine_.loadedPath() != soundFontFiles_[soundFontIndex].path)
+        (void)previewEngine_.loadSoundFont (soundFontFiles_[soundFontIndex].path);
+
+    rebuildInstrumentParameterStrings ();
+
+    const auto presetCount = previewEngine_.presets().size();
+    if (presetCount == 0)
+        EditControllerEx1::setParamNormalized (kParamGMInstrument, 0.0);
+    else
+        EditControllerEx1::setParamNormalized (kParamGMInstrument, listIndexToNormalized (std::min (selectedPresetIndexFromParameter (), presetCount - 1), presetCount));
+}
+
+void CVGMInstrumentLiteController::rebuildSoundFontParameterStrings ()
+{
+    if (auto* parameter = getStringListParameter (*this, kParamGMSoundFont))
+    {
+        std::vector<std::string> labels;
+        labels.reserve (soundFontFiles_.size());
+        for (const auto& soundFont : soundFontFiles_)
+            labels.push_back (soundFont.fileName);
+
+        if (labels.empty())
+            labels.push_back ("No .sf2 found in CV_GM_Instrument_Lite_SoundFonts");
+
+        replaceStringList (*parameter, labels);
+    }
+}
+
+void CVGMInstrumentLiteController::rebuildInstrumentParameterStrings ()
+{
+    if (auto* parameter = getStringListParameter (*this, kParamGMInstrument))
+    {
+        std::vector<std::string> labels;
+        const auto& presets = previewEngine_.presets();
+        labels.reserve (presets.size());
+        for (const auto& preset : presets)
+            labels.push_back (preset.displayName);
+
+        if (labels.empty())
+            labels.push_back (previewEngine_.isLoaded() ? "No presets found in selected .sf2" : "Load a SoundFont to list real presets");
+
+        replaceStringList (*parameter, labels);
+    }
+}
+
+std::size_t CVGMInstrumentLiteController::selectedSoundFontIndexFromParameter () const noexcept
+{
+    return normalizedToListIndex (const_cast<CVGMInstrumentLiteController*> (this)->EditControllerEx1::getParamNormalized (kParamGMSoundFont), soundFontFiles_.size());
+}
+
+std::size_t CVGMInstrumentLiteController::selectedPresetIndexFromParameter () const noexcept
+{
+    return normalizedToListIndex (const_cast<CVGMInstrumentLiteController*> (this)->EditControllerEx1::getParamNormalized (kParamGMInstrument), previewEngine_.presets().size());
 }
 
 tresult PLUGIN_API CVGMInstrumentLiteController::terminate ()
@@ -169,6 +300,34 @@ tresult PLUGIN_API CVGMInstrumentLiteController::getState (IBStream* state)
 }
 
 
+Vst::ParamValue PLUGIN_API CVGMInstrumentLiteController::normalizedParamToPlain (Vst::ParamID tag, Vst::ParamValue valueNormalized)
+{
+    return EditControllerEx1::normalizedParamToPlain (tag, valueNormalized);
+}
+
+Vst::ParamValue PLUGIN_API CVGMInstrumentLiteController::plainParamToNormalized (Vst::ParamID tag, Vst::ParamValue plainValue)
+{
+    return EditControllerEx1::plainParamToNormalized (tag, plainValue);
+}
+
+tresult PLUGIN_API CVGMInstrumentLiteController::setParamNormalized (Vst::ParamID tag, Vst::ParamValue value)
+{
+    const auto result = EditControllerEx1::setParamNormalized (tag, value);
+
+    if (tag == kParamGMSoundFont)
+    {
+        EditControllerEx1::setParamNormalized (kParamGMInstrument, 0.0);
+        refreshPresetList ();
+    }
+    else if (tag == kParamGMRescan && value > 0.5)
+    {
+        refreshSoundFontList ();
+        refreshPresetList ();
+    }
+
+    return result;
+}
+
 tresult PLUGIN_API CVGMInstrumentLiteController::getMidiControllerAssignment (int32 busIndex,
                                                                                int16 /*channel*/,
                                                                                Vst::CtrlNumber midiControllerNumber,
@@ -210,7 +369,7 @@ IPlugView* PLUGIN_API CVGMInstrumentLiteController::createView (FIDString name)
         return nullptr;
 
 #if CV_GM_INSTRUMENT_LITE_ENABLE_CV_GUI
-    Steinberg::ViewRect size (0, 0, 520, 360);
+    Steinberg::ViewRect size (0, 0, 860, 560);
     return new CV::GUI::VST3ImGuiView (size, this, "CV GM Instrument Lite");
 #else
     return nullptr;

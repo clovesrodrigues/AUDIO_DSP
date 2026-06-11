@@ -4,7 +4,7 @@
 
 ## Current status
 
-Prompt 10/10 documentation/tests/closure. The first GM Instrument Lite cycle is intentionally closed here: the goal is a practical SoundFont player, not a new synthesis laboratory. After this point, test the plugin musically in Reaper with real `.sf2` banks before starting another prompt cycle.
+Post-test correction: the SoundFont and Instrument lists are now refreshed from the real sibling `CV_GM_Instrument_Lite_SoundFonts/` folder instead of relying on a fixed General MIDI instrument list. The first list should show actual `.sf2` filenames, and the second list should show the real presets extracted from the selected `.sf2` when TinySoundFont is available.
 
 ## Fixed SoundFont folder contract
 
@@ -45,7 +45,7 @@ The scanner resolves the expected folder from a `CV_GM_Instrument_Lite.vst3` bun
 
 ## Real preset list
 
-When TinySoundFont is available and a bank loads, the engine rebuilds a preset list from the selected `.sf2`. Each entry stores the TinySoundFont preset index, bank/program display fields, raw preset name, and a formatted label such as `000:033 Electric Bass Finger`. Selecting a different preset is designed to stop active notes first so new notes use the newly selected instrument cleanly. The processor auto-loads the selected SoundFont during activation/processing setup and routes Note On/Off velocity to that selected preset.
+When TinySoundFont is available and a bank loads, the engine rebuilds a preset list from the selected `.sf2`. Each entry stores the TinySoundFont preset index, raw preset name, and a formatted label. Selecting a different preset stops active notes first so new notes use the newly selected instrument cleanly. The controller also loads the selected `.sf2` on the UI side to populate the Instrument list with real SoundFont presets instead of a fixed General MIDI name table.
 
 ## Interface
 
@@ -78,7 +78,7 @@ MIDI In -> TinySoundFont Engine -> Volume/MIDI expression -> 3-Band EQ -> Hall R
 - Live keyboard/sequencer playback.
 - Volume, Bass, Mid, Treble, and Room only.
 - MIDI velocity, sustain CC64, pitch bend, all-notes-off/all-sounds-off, MIDI Volume CC7, Expression CC11, Reverb Send CC91, and keyboard EQ CC hooks for bass/mid/treble.
-- CV_GUI custom editor when enabled in CMake, with DAW generic editor fallback.
+- CV_GUI custom editor when enabled in CMake, with DAW generic editor fallback. The CV_GUI view now starts larger and advertises resize support to hosts that allow embedded VST3 editor resizing.
 
 ## Explicit limitations for this closed first cycle
 

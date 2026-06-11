@@ -43,3 +43,8 @@ After Prompt 10/10, do not continue adding features by repeatedly saying `prossi
 - Automatic internet download of SoundFonts.
 - Embedded `.sf2` in the plugin binary.
 - Compressor, drive, humanize, synthetic noise, physical modeling, or custom sample editing.
+
+
+## Post-test correction cycle
+
+After the first Reaper test, the immediate correction scope is limited to Phase 1 and Phase 2: dynamic SoundFont selection, real preset-list synchronization for the selected `.sf2`, and a larger/resizable CV_GUI editor. Expression/bend mapping and deeper audio shaping remain out of scope until selection and layout are proven in Reaper.
