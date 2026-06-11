@@ -10,7 +10,6 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstring>
 
 using namespace Steinberg;
@@ -64,6 +63,11 @@ tresult PLUGIN_API SpectralNoiseReducerVST3Processor::canProcessSampleSize (int3
     return symbolicSampleSize == Vst::kSample32 ? kResultTrue : kResultFalse;
 }
 
+uint32 PLUGIN_API SpectralNoiseReducerVST3Processor::getLatencySamples ()
+{
+    return static_cast<uint32> (DSP::kFFTSize);
+}
+
 tresult PLUGIN_API SpectralNoiseReducerVST3Processor::process (Vst::ProcessData& data)
 {
     if (data.symbolicSampleSize != Vst::kSample32)
@@ -91,6 +95,12 @@ tresult PLUGIN_API SpectralNoiseReducerVST3Processor::process (Vst::ProcessData&
     if (data.numSamples <= 0)
         return kResultOk;
 
+    if (!learnNoiseActive_ && !subtractNoiseActive_)
+    {
+        copyInputsToOutputs (data);
+        return kResultOk;
+    }
+
     const int32 minBus = std::min (data.numInputs, data.numOutputs);
     for (int32 bus = 0; bus < minBus; ++bus)
     {
@@ -103,13 +113,6 @@ tresult PLUGIN_API SpectralNoiseReducerVST3Processor::process (Vst::ProcessData&
             Vst::Sample32* output = data.outputs[bus].channelBuffers32[channel];
             if (input == nullptr || output == nullptr)
                 continue;
-
-            if (bypassed_)
-            {
-                if (output != input)
-                    std::memcpy (output, input, static_cast<std::size_t> (data.numSamples) * sizeof (Vst::Sample32));
-                continue;
-            }
 
             auto& processor = processors_[static_cast<std::size_t> (channel)];
             for (int32 sample = 0; sample < data.numSamples; ++sample)
@@ -171,21 +174,6 @@ float SpectralNoiseReducerVST3Processor::normalizedToOutputGainDb (double normal
     return -24.0f + clamp01 (normalized) * 48.0f;
 }
 
-float SpectralNoiseReducerVST3Processor::normalizedToSpectralFloorDb (double normalized) noexcept
-{
-    return -120.0f + clamp01 (normalized) * 108.0f;
-}
-
-float SpectralNoiseReducerVST3Processor::normalizedToMaxReductionDb (double normalized) noexcept
-{
-    return clamp01 (normalized) * 80.0f;
-}
-
-std::size_t SpectralNoiseReducerVST3Processor::normalizedToFrequencySmoothingBins (double normalized) noexcept
-{
-    return static_cast<std::size_t> (std::lround (clamp01 (normalized) * 12.0f));
-}
-
 void SpectralNoiseReducerVST3Processor::resetParametersToDefaults () noexcept
 {
     for (int32 index = 0; index < Params::kParameterCount; ++index)
@@ -207,24 +195,40 @@ void SpectralNoiseReducerVST3Processor::applyParameterToDSP (
 
     switch (id)
     {
-        case Params::kBypass:
-            bypassed_ = normalizedValue >= 0.5;
-            break;
         case Params::kLearnNoise:
-            for (auto& processor : processors_)
-                processor.setLearnNoiseEnabled (normalizedValue >= 0.5);
-            break;
-        case Params::kSubtractNoise:
-            for (auto& processor : processors_)
-                processor.setSubtractNoiseEnabled (normalizedValue >= 0.5);
-            break;
-        case Params::kClearProfile:
-            if (normalizedValue >= 0.5)
+        {
+            const bool enabled = normalizedValue >= 0.5;
+            if (enabled && !learnNoiseActive_)
             {
                 for (auto& processor : processors_)
-                    processor.triggerClearProfile ();
+                    processor.clearProfile ();
             }
+
+            if (learnNoiseActive_ != enabled)
+            {
+                for (auto& processor : processors_)
+                    processor.resetLatencyState ();
+            }
+
+            learnNoiseActive_ = enabled;
+            for (auto& processor : processors_)
+                processor.setLearnNoiseEnabled (enabled);
             break;
+        }
+        case Params::kSubtractNoise:
+        {
+            const bool enabled = normalizedValue >= 0.5;
+            if (subtractNoiseActive_ != enabled)
+            {
+                for (auto& processor : processors_)
+                    processor.resetLatencyState ();
+            }
+
+            subtractNoiseActive_ = enabled;
+            for (auto& processor : processors_)
+                processor.setSubtractNoiseEnabled (enabled);
+            break;
+        }
         case Params::kOutputGain:
             for (auto& processor : processors_)
                 processor.setOutputGainDb (normalizedToOutputGainDb (normalizedValue));
@@ -233,37 +237,14 @@ void SpectralNoiseReducerVST3Processor::applyParameterToDSP (
             for (auto& processor : processors_)
                 processor.setPresenceProtect (clamp01 (normalizedValue));
             break;
-        case Params::kReductionAmount:
-            for (auto& processor : processors_)
-                processor.setReductionAmount (clamp01 (normalizedValue));
-            break;
-        case Params::kSpectralFloor:
-            for (auto& processor : processors_)
-                processor.setSpectralFloorDb (normalizedToSpectralFloorDb (normalizedValue));
-            break;
-        case Params::kMaxReduction:
-            for (auto& processor : processors_)
-                processor.setMaxReductionDb (normalizedToMaxReductionDb (normalizedValue));
-            break;
         case Params::kSmoothing:
             for (auto& processor : processors_)
                 processor.setSmoothing (clamp01 (normalizedValue));
             break;
-        case Params::kFrequencySmoothing:
-            for (auto& processor : processors_)
-                processor.setFrequencySmoothingBins (normalizedToFrequencySmoothingBins (normalizedValue));
-            break;
-        case Params::kTransientProtection:
-            for (auto& processor : processors_)
-                processor.setTransientProtection (clamp01 (normalizedValue));
-            break;
-        case Params::kMix:
-            for (auto& processor : processors_)
-                processor.setMix (clamp01 (normalizedValue));
-            break;
         default:
             break;
     }
+
 }
 
 Vst::ParamValue SpectralNoiseReducerVST3Processor::getParameterNormalized (Vst::ParamID id) const noexcept
@@ -288,6 +269,26 @@ void SpectralNoiseReducerVST3Processor::setParameterNormalized (
             return;
         }
     }
+}
+
+void SpectralNoiseReducerVST3Processor::copyInputsToOutputs (Vst::ProcessData& data) noexcept
+{
+    const int32 minBus = std::min (data.numInputs, data.numOutputs);
+    for (int32 bus = 0; bus < minBus; ++bus)
+    {
+        const int32 minChan = std::min (data.inputs[bus].numChannels, data.outputs[bus].numChannels);
+        for (int32 channel = 0; channel < minChan; ++channel)
+        {
+            const Vst::Sample32* input = data.inputs[bus].channelBuffers32[channel];
+            Vst::Sample32* output = data.outputs[bus].channelBuffers32[channel];
+            if (input != nullptr && output != nullptr && output != input)
+                std::memcpy (output, input, static_cast<std::size_t> (data.numSamples) * sizeof (Vst::Sample32));
+        }
+
+        data.outputs[bus].silenceFlags = data.inputs[bus].silenceFlags;
+    }
+
+    clearRemainingOutputs (data, minBus);
 }
 
 void SpectralNoiseReducerVST3Processor::clearRemainingOutputs (Vst::ProcessData& data, int32 firstBus) noexcept

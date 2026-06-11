@@ -1,9 +1,10 @@
 # SpectralNoiseReducer DSP smoke example
 
-Este exemplo valida o `cvdsp::spectral::SpectralNoiseReducer` como um DSP de
-**percepcao/reducao de ruido** para ficar no inicio da cadeia de gravacao. Ele
-nao e um pedal: a ideia e aprender o ruido de fundo antes dos pedais, subtrair o
-perfil aprendido e depois alimentar o restante do set com um sinal mais limpo.
+Este exemplo valida o `cvdsp::spectral::SpectralNoiseReducer` legado e o novo
+`cvdsp::spectral::RealtimeNoiseReducer` como DSPs de **percepcao/reducao de
+ruido** para ficar no inicio da cadeia de gravacao. Ele nao e um pedal: a ideia
+e aprender o ruido de fundo antes dos pedais, subtrair o perfil aprendido e
+depois alimentar o restante do set com um sinal mais limpo.
 
 ## Controles essenciais
 
@@ -11,8 +12,9 @@ perfil aprendido e depois alimentar o restante do set com um sinal mais limpo.
   ruido.
 - **Subtrair Ruidos** (`setSubtractNoiseEnabled`) liga/desliga a aplicacao do
   perfil aprendido ao audio.
-- **Limpar Perfil** (`triggerClearProfile`) apaga o perfil aprendido e reinicia a
-  contagem de frames.
+- **Limpar Perfil** (`triggerClearProfile`) continua disponivel no core para testes
+  e integracoes avancadas, mas o VST3 minimalista nao expoe esse botao: iniciar
+  **Perceber Ruido** novamente ja captura um perfil novo.
 
 Fluxo recomendado para gravacao:
 
@@ -21,22 +23,18 @@ Fluxo recomendado para gravacao:
    aterramento e ruido ambiente estacionario.
 3. Desligue **Perceber Ruido**.
 4. Mantenha **Subtrair Ruidos** ligado durante a gravacao para aplicar a limpeza.
-5. Use **Limpar Perfil** quando trocar interface, captador, cabo, ganho ou sala.
+5. No VST3, ligue **Perceber Ruido** novamente quando trocar interface, captador,
+   cabo, ganho ou sala, porque isso inicia uma captura nova.
 
 > Se **Subtrair Ruidos** tambem for desligado, o DSP entra em bypass real. Isso e
 > util para comparacao A/B, mas nao aplica reducao durante a gravacao.
 
-## Parametros avancados exercitados
+## Controles publicos recomendados
 
-O smoke example tambem configura:
-
-- `Output Gain`: compensacao de volume depois da reducao.
-- `Presence Protect`: preserva parte da regiao de presenca para evitar som opaco.
-- `Reduction Amount`, `Spectral Floor`, `Max Reduction` e `Mix`: controles de
-  agressividade e seguranca contra artefatos de subtracao espectral.
-- `Frequency Smoothing` e `Transient Protection`: suavizacao estilo Audacity entre
-  bins vizinhos e protecao de ataques para reduzir artefatos de voz robotica /
-  musical noise em uso real-time com multiplas instancias.
+O VST3 deve expor apenas `Perceber Ruido`, `Subtrair Ruido`, `Ganho`,
+`Presenca` e `Smooth`. O smoke example tambem exercita o `RealtimeNoiseReducer`, que e o core limpo
+usado pelo VST3 minimalista, incluindo um teste multi-instancia para garantir
+que perfis e historicos de ganho nao vazam entre faixas.
 
 ## Build com CMake
 
@@ -46,6 +44,19 @@ A partir da raiz do repositorio:
 cmake -S examples/spectral_noise_reducer_dsp -B build/examples/spectral_noise_reducer_dsp
 cmake --build build/examples/spectral_noise_reducer_dsp
 ./build/examples/spectral_noise_reducer_dsp/spectral_noise_reducer_smoke
+```
+
+
+## Benchmark leve de CPU
+
+O exemplo tambem fornece `realtime_noise_reducer_benchmark`, que mede o core
+`RealtimeNoiseReducer<float, 1024>` em 1, 4 e 10 instancias independentes. Ele
+nao substitui a medicao no REAPER, mas ajuda a comparar mudancas de codigo sem
+abrir a DAW e confirma que perfis/estados continuam isolados por instancia.
+
+```bash
+cmake --build build/examples/spectral_noise_reducer_dsp --target realtime_noise_reducer_benchmark
+./build/examples/spectral_noise_reducer_dsp/realtime_noise_reducer_benchmark
 ```
 
 ## Build direto com compilador

@@ -12,8 +12,12 @@ independent from VST3, JUCE, CLAP, iPlug2 or any other host SDK.
   and Blackman-style windows.
 - `SpectrumAnalyzer.hpp`: lightweight spectral analysis support for meters and
   GUIs.
-- `SpectralNoiseReducer.hpp`: recording-chain noise profile learner/subtractor
-  for reducing stationary background noise before pedal/effect processing.
+- `SpectralNoiseReducer.hpp`: full frame/streaming spectral utility with GUI
+  snapshots for experiments and visualization.
+- `RealtimeNoiseReducer.hpp`: minimal profile learner/subtractor intended for the
+  VST3 recording utility; it keeps only the learn/subtract/gain/presence/smooth
+  workflow and uses frozen power profiles, 50% overlap and banded gain decisions
+  to reduce CPU and robotic artifacts.
 
 ## SpectralNoiseReducer is not a pedal
 
@@ -38,19 +42,22 @@ profile contains only unwanted background noise.
 
 ## Mandatory user workflow
 
-The user-facing UI should always expose these three controls prominently:
+The user-facing VST3 should expose two prominent workflow buttons plus the three
+small tone/safety controls documented below:
 
 1. **Perceber Ruído** / `setLearnNoiseEnabled(bool)`
-   - Enables/disables learning the current noise profile.
+   - Starts learning the current noise profile.
+   - The VST3 clears the previous profile automatically when this control is
+     switched on, so the musician does not need a separate public clear button.
    - Use while the instrument/microphone is silent but the real gain staging is
      active.
-2. **Subtrair Ruídos** / `setSubtractNoiseEnabled(bool)`
-   - Enables/disables applying the learned profile to the incoming signal.
+2. **Subtrair Ruído** / `setSubtractNoiseEnabled(bool)`
+   - Applies the learned profile to the incoming signal.
    - Use after a profile is ready to clean the recording input.
-3. **Limpar Perfil** / `triggerClearProfile()`
-   - Clears the learned profile and resets the learn frame count.
-   - Use whenever the input chain changes: cable, pickup, mic, gain, room,
-     interface, sample rate or noise source.
+
+`triggerClearProfile()` remains available in the DSP core for tests and custom
+adapters, but the minimal VST3 hides it to keep the workflow close to
+"learn, validate/subtract, play".
 
 Recommended session flow:
 
@@ -59,34 +66,30 @@ Recommended session flow:
 2. Leave the instrument/microphone silent with the real recording gain.
 3. Turn on Perceber Ruído for a short capture window.
 4. Turn off Perceber Ruído after the profile is ready.
-5. Turn on Subtrair Ruídos and record normally.
-6. Use Limpar Perfil before learning a new input/noise profile.
+5. Turn on Subtrair Ruído and record normally.
+6. Turn on Perceber Ruído again to capture a fresh profile after changing cable,
+   pickup, microphone, gain, room, interface or sample rate.
 ```
 
 When both Learn and Subtract are disabled, the streaming API is designed to be a
 true pass-through so A/B checks do not alter the signal.
 
-## Advanced controls
+## Public controls for the VST3 utility
 
-These controls should be available below the three mandatory buttons, preferably
-as an "Advanced" section for users who need finer tuning:
+The recording utility should expose only five public controls:
 
-- `Output Gain`: post-reduction gain compensation.
-- `Presence Protect`: protects part of the guitar/vocal presence region so heavy
-  subtraction does not make the source too dull.
-- `Reduction Amount`: overall aggressiveness of the learned-profile subtraction.
-- `Spectral Floor`: lower safety floor that helps avoid musical-noise bubbling.
-- `Max Reduction`: cap on how far any spectral bin can be attenuated.
-- `Smoothing`: temporal smoothing of attenuation changes.
-- `Frequency Smoothing`: Audacity-style neighboring-bin gain smoothing that avoids isolated-bin attenuation and reduces robotic/phasey artifacts when several instances run together.
-- `Transient Protection`: biases bins that rise clearly above the learned noise profile back toward unity gain so attacks and voiced content do not get mistaken for stationary noise.
-- `Mix`: wet/dry blend for conservative parallel cleanup.
+- `Perceber Ruido`: learn a fresh noise profile from silence.
+- `Subtrair Ruido`: apply the learned profile.
+- `Ganho`: post-reduction output gain.
+- `Presenca`: protect the guitar/vocal presence region from dulling.
+- `Smooth`: temporal smoothing of attenuation changes.
 
-Good defaults should favor transparent reduction over maximum silence. Excessive
-settings can create chirps, watery artifacts or dull transients. Each reducer
-object owns its FFT engine, overlap-add rings, learned profile and gain history;
-VST3 processors should therefore instantiate one reducer per audio channel and
-per plug-in instance, never a shared/static reducer.
+The VST3 uses `RealtimeNoiseReducer`, not the heavier snapshot-oriented
+`SpectralNoiseReducer`, so other spectral safety constants and the banded gain
+optimizer remain internal defaults. Each reducer object owns its FFT engine, overlap-add rings, learned
+profile and gain history; VST3 processors should therefore instantiate one
+reducer per audio channel and per plug-in instance, never a shared/static
+reducer.
 
 ## APIs
 

@@ -11,14 +11,17 @@ constexpr Steinberg::int32 kDefaultWidth = 800;
 constexpr Steinberg::int32 kDefaultHeight = 480;
 }
 
-ImGuiBackend::ImGuiBackend (Steinberg::Vst::EditController* controller)
-: ImGuiBackend (Steinberg::ViewRect (0, 0, kDefaultWidth, kDefaultHeight), controller)
+ImGuiBackend::ImGuiBackend (Steinberg::Vst::EditController* controller, const char* editorTitle)
+: ImGuiBackend (Steinberg::ViewRect (0, 0, kDefaultWidth, kDefaultHeight), controller, editorTitle)
 {
 }
 
-ImGuiBackend::ImGuiBackend (const Steinberg::ViewRect& initialSize, Steinberg::Vst::EditController* controller)
+ImGuiBackend::ImGuiBackend (const Steinberg::ViewRect& initialSize,
+                            Steinberg::Vst::EditController* controller,
+                            const char* editorTitle)
 : initialSize_ (initialSize)
 , controller_ (controller)
+, editorTitle_ (editorTitle ? editorTitle : "CV_DSP")
 {
 }
 
@@ -27,7 +30,7 @@ Steinberg::IPlugView* ImGuiBackend::createView (Steinberg::FIDString name)
     if (!Steinberg::FIDStringsEqual (name, Steinberg::Vst::ViewType::kEditor))
         return nullptr;
 
-    return new VST3ImGuiView (initialSize_, controller_);
+    return new VST3ImGuiView (initialSize_, controller_, editorTitle_.c_str ());
 }
 
 } // namespace CV::GUI

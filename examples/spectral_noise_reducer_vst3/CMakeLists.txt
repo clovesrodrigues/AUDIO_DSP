@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(SPECTRAL_NOISE_REDUCER_VST3_ENABLE_CV_GUI "Enable the CV_GUI editor when a platform backend is available" OFF)
+option(SPECTRAL_NOISE_REDUCER_VST3_ENABLE_CV_GUI "Enable the CV_GUI editor when a platform backend is available" ${WIN32})
 set(plugin_enable_cv_gui OFF)
 if(SPECTRAL_NOISE_REDUCER_VST3_ENABLE_CV_GUI AND WIN32)
     set(plugin_enable_cv_gui ON)

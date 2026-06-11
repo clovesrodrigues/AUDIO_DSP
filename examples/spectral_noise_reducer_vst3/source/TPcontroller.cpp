@@ -36,19 +36,11 @@ tresult PLUGIN_API SpectralNoiseReducerVST3Controller::initialize (FUnknown* con
     if (result != kResultOk)
         return result;
 
-    addParameter (parameters, STR16 ("Bypass"), STR16 (""), 1, Params::kDefaultValues[0], Vst::ParameterInfo::kCanAutomate | Vst::ParameterInfo::kIsBypass, Params::kBypass);
-    addParameter (parameters, STR16 ("Perceber Ruido"), STR16 (""), 1, Params::kDefaultValues[1], Vst::ParameterInfo::kCanAutomate, Params::kLearnNoise);
-    addParameter (parameters, STR16 ("Subtrair Ruidos"), STR16 (""), 1, Params::kDefaultValues[2], Vst::ParameterInfo::kCanAutomate, Params::kSubtractNoise);
-    addParameter (parameters, STR16 ("Limpar Perfil"), STR16 (""), 1, Params::kDefaultValues[3], Vst::ParameterInfo::kCanAutomate, Params::kClearProfile);
-    addParameter (parameters, STR16 ("Output Gain"), STR16 ("dB"), 0, Params::kDefaultValues[4], Vst::ParameterInfo::kCanAutomate, Params::kOutputGain);
-    addParameter (parameters, STR16 ("Presence Protect"), STR16 ("%"), 0, Params::kDefaultValues[5], Vst::ParameterInfo::kCanAutomate, Params::kPresenceProtect);
-    addParameter (parameters, STR16 ("Reduction Amount"), STR16 ("%"), 0, Params::kDefaultValues[6], Vst::ParameterInfo::kCanAutomate, Params::kReductionAmount);
-    addParameter (parameters, STR16 ("Spectral Floor"), STR16 ("dB"), 0, Params::kDefaultValues[7], Vst::ParameterInfo::kCanAutomate, Params::kSpectralFloor);
-    addParameter (parameters, STR16 ("Max Reduction"), STR16 ("dB"), 0, Params::kDefaultValues[8], Vst::ParameterInfo::kCanAutomate, Params::kMaxReduction);
-    addParameter (parameters, STR16 ("Smoothing"), STR16 ("%"), 0, Params::kDefaultValues[9], Vst::ParameterInfo::kCanAutomate, Params::kSmoothing);
-    addParameter (parameters, STR16 ("Frequency Smoothing"), STR16 ("bins"), 0, Params::kDefaultValues[10], Vst::ParameterInfo::kCanAutomate, Params::kFrequencySmoothing);
-    addParameter (parameters, STR16 ("Transient Protection"), STR16 ("%"), 0, Params::kDefaultValues[11], Vst::ParameterInfo::kCanAutomate, Params::kTransientProtection);
-    addParameter (parameters, STR16 ("Mix"), STR16 ("%"), 0, Params::kDefaultValues[12], Vst::ParameterInfo::kCanAutomate, Params::kMix);
+    addParameter (parameters, STR16 ("Perceber Ruido"), STR16 (""), 1, Params::kDefaultValues[0], Vst::ParameterInfo::kCanAutomate, Params::kLearnNoise);
+    addParameter (parameters, STR16 ("Subtrair Ruido"), STR16 (""), 1, Params::kDefaultValues[1], Vst::ParameterInfo::kCanAutomate, Params::kSubtractNoise);
+    addParameter (parameters, STR16 ("Ganho"), STR16 ("dB"), 0, Params::kDefaultValues[2], Vst::ParameterInfo::kCanAutomate, Params::kOutputGain);
+    addParameter (parameters, STR16 ("Presenca"), STR16 ("%"), 0, Params::kDefaultValues[3], Vst::ParameterInfo::kCanAutomate, Params::kPresenceProtect);
+    addParameter (parameters, STR16 ("Smooth"), STR16 ("%"), 0, Params::kDefaultValues[4], Vst::ParameterInfo::kCanAutomate, Params::kSmoothing);
 
     return result;
 }
@@ -90,7 +82,7 @@ IPlugView* PLUGIN_API SpectralNoiseReducerVST3Controller::createView (FIDString 
         return nullptr;
 
 #if SPECTRAL_NOISE_REDUCER_VST3_ENABLE_CV_GUI
-    CV::GUI::ImGuiBackend guiBackend (Steinberg::ViewRect (0, 0, 980, 620), this);
+    CV::GUI::ImGuiBackend guiBackend (Steinberg::ViewRect (0, 0, 980, 620), this, "CV Spectral Noise Reducer");
     if (auto* view = guiBackend.createView (name))
         return view;
 #endif

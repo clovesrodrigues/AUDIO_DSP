@@ -1,4 +1,5 @@
 #include "../../CV_DSP/Spectral/SpectralNoiseReducer.hpp"
+#include "../../CV_DSP/Spectral/RealtimeNoiseReducer.hpp"
 
 #include <array>
 #include <cmath>
@@ -48,6 +49,158 @@ double rmsAfterWarmup(const std::array<float, Size>& buffer, std::size_t warmup)
 
     return count > 0 ? std::sqrt(energy / static_cast<double>(count)) : 0.0;
 }
+
+
+float syntheticNoiseAt(float frequency, std::size_t sample, float gain) noexcept
+{
+    return gain * std::sin(2.0f * kPi * frequency * static_cast<float>(sample) / kSampleRate);
+}
+
+int runRealtimeNoiseReducerSmoke()
+{
+    using RealtimeReducer = cvdsp::spectral::RealtimeNoiseReducer<float, 1024>;
+
+    RealtimeReducer reducer;
+    if (!reducer.prepare(kSampleRate) || !reducer.isPrepared())
+    {
+        std::cerr << "RealtimeNoiseReducer prepare failed\n";
+        return 20;
+    }
+
+    reducer.setMinimumLearnFrames(4);
+    reducer.setOutputGainDb(0.0f);
+    reducer.setPresenceProtect(0.5f);
+    reducer.setSmoothing(0.65f);
+
+    reducer.setLearnNoiseEnabled(true);
+    reducer.setSubtractNoiseEnabled(false);
+    for (std::size_t i = 0; i < RealtimeReducer::kFFTSize * 8; ++i)
+    {
+        if (!isFinite(reducer.processSample(syntheticNoise(i))))
+        {
+            std::cerr << "Realtime reducer produced non-finite learn sample\n";
+            return 21;
+        }
+    }
+
+    if (!reducer.isProfileReady() || reducer.getState() != cvdsp::spectral::RealtimeNoiseReducerState::Learning)
+    {
+        std::cerr << "Realtime reducer did not learn a profile\n";
+        return 22;
+    }
+
+    reducer.setLearnNoiseEnabled(false);
+    reducer.setSubtractNoiseEnabled(true);
+
+    constexpr std::size_t kProcessSamples = 16384;
+    constexpr std::size_t kWarmupSamples = RealtimeReducer::kFFTSize * 4;
+    std::array<float, kProcessSamples> input {};
+    std::array<float, kProcessSamples> output {};
+
+    for (std::size_t i = 0; i < kProcessSamples; ++i)
+    {
+        input[i] = syntheticNoise(i);
+        output[i] = reducer.processSample(input[i]);
+    }
+
+    if (!isFiniteBuffer(output))
+    {
+        std::cerr << "Realtime reducer produced non-finite subtract output\n";
+        return 23;
+    }
+
+    const double inputRms = rmsAfterWarmup(input, kWarmupSamples);
+    const double outputRms = rmsAfterWarmup(output, kWarmupSamples);
+    if (!(outputRms < inputRms * 0.85))
+    {
+        std::cerr << "Realtime reducer insufficient reduction: inputRms=" << inputRms
+                  << " outputRms=" << outputRms << '\n';
+        return 24;
+    }
+
+    const std::size_t learnedFramesBeforeFlush = reducer.getLearnedFrameCount();
+    reducer.resetLatencyState();
+    if (!reducer.isProfileReady() || reducer.getLearnedFrameCount() != learnedFramesBeforeFlush)
+    {
+        std::cerr << "Realtime reducer latency flush changed the learned profile\n";
+        return 31;
+    }
+
+    reducer.setLearnNoiseEnabled(false);
+    reducer.setSubtractNoiseEnabled(false);
+    const float bypassed = reducer.processSample(0.125f);
+    if (std::fabs(bypassed - 0.125f) > 1.0e-7f)
+    {
+        std::cerr << "Realtime reducer bypass changed the sample\n";
+        return 25;
+    }
+
+    std::cout << "RealtimeNoiseReducer smoke passed. inputRms=" << inputRms
+              << " outputRms=" << outputRms << '\n';
+    return 0;
+}
+
+int runRealtimeNoiseReducerMultiInstanceSmoke()
+{
+    using RealtimeReducer = cvdsp::spectral::RealtimeNoiseReducer<float, 1024>;
+
+    RealtimeReducer trackA;
+    RealtimeReducer trackB;
+    if (!trackA.prepare(kSampleRate) || !trackB.prepare(kSampleRate))
+    {
+        std::cerr << "Realtime multi-instance prepare failed\n";
+        return 26;
+    }
+
+    trackA.setMinimumLearnFrames(4);
+    trackB.setMinimumLearnFrames(4);
+    trackA.setLearnNoiseEnabled(true);
+    trackB.setLearnNoiseEnabled(true);
+
+    for (std::size_t i = 0; i < RealtimeReducer::kFFTSize * 8; ++i)
+    {
+        if (!isFinite(trackA.processSample(syntheticNoiseAt(60.0f, i, 0.04f)))
+            || !isFinite(trackB.processSample(syntheticNoiseAt(400.0f, i, 0.04f))))
+        {
+            std::cerr << "Realtime multi-instance learn produced non-finite output\n";
+            return 27;
+        }
+    }
+
+    if (!trackA.isProfileReady() || !trackB.isProfileReady())
+    {
+        std::cerr << "Realtime multi-instance profiles were not learned\n";
+        return 28;
+    }
+
+    const std::size_t framesA = trackA.getLearnedFrameCount();
+    const std::size_t framesB = trackB.getLearnedFrameCount();
+    trackA.setLearnNoiseEnabled(false);
+    trackB.setLearnNoiseEnabled(false);
+    trackA.setSubtractNoiseEnabled(true);
+    trackB.setSubtractNoiseEnabled(true);
+
+    for (std::size_t i = 0; i < RealtimeReducer::kFFTSize * 16; ++i)
+    {
+        const float signalA = syntheticNoiseAt(220.0f, i, 0.08f) + syntheticNoiseAt(60.0f, i, 0.02f);
+        const float signalB = syntheticNoiseAt(330.0f, i, 0.08f) + syntheticNoiseAt(400.0f, i, 0.02f);
+        if (!isFinite(trackA.processSample(signalA)) || !isFinite(trackB.processSample(signalB)))
+        {
+            std::cerr << "Realtime multi-instance reduction produced non-finite output\n";
+            return 29;
+        }
+    }
+
+    if (trackA.getLearnedFrameCount() != framesA || trackB.getLearnedFrameCount() != framesB)
+    {
+        std::cerr << "Realtime multi-instance profile isolation failed\n";
+        return 30;
+    }
+
+    std::cout << "RealtimeNoiseReducer multi-instance smoke passed\n";
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -186,5 +339,10 @@ int main()
 
     std::cout << "SpectralNoiseReducer smoke passed. inputRms=" << inputRms
               << " outputRms=" << outputRms << '\n';
-    return 0;
+
+    const int realtimeResult = runRealtimeNoiseReducerSmoke();
+    if (realtimeResult != 0)
+        return realtimeResult;
+
+    return runRealtimeNoiseReducerMultiInstanceSmoke();
 }
