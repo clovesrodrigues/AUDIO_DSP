@@ -1,9 +1,9 @@
 # CV_DSP Guitar Pedals
 
 This folder contains a header-only, C++20, real-time-safe family of guitar
-distortion pedals. The design separates shared infrastructure from concrete
+guitar pedals. The design separates shared infrastructure from concrete
 pedal voicings so future pedals can reuse the same parameter IDs, mapping
-helpers, gain/mix stages, pre/post filtering and clipping logic.
+helpers, gain/mix stages, pre/post filtering and clipping logic where applicable.
 
 ## Architecture
 
@@ -37,11 +37,23 @@ same smaller building blocks directly.
   asymmetry, blend, foldback and multiple clip modes.
 - `PedalPreFilter.hpp`: pre-distortion voice EQ using CV_DSP biquads.
 - `PedalPostFilter.hpp`: post-distortion tone EQ, fizz cut and notch controls.
-- `PedalDriveCore.hpp`: reusable complete drive chain for most pedal designs.
+- `PedalDriveCore.hpp`: reusable complete drive chain for distortion pedal designs.
 - `../Pedals.hpp`: aggregate include for all pedal infrastructure and concrete
   pedal classes.
 
 ## Concrete pedals
+
+### SustainerDSP
+
+A guitar sustain/leveling pedal with sidechain high-pass detection, capped upward gain, smoothed gain application, integrated hysteresis noise gate, output level and dry/wet mix. It intentionally composes dynamics/filter/mix helpers directly instead of using `PedalDriveCore` because it is not a clipping topology.
+
+### WahWahDSP
+
+An expression-controlled wah-wah pedal built on a TPT state-variable band-pass filter. It smooths the normalized expression input, maps it through a musical taper into cutoff/Q ranges, adds optional light vintage filter drive, and blends band-pass resonance with dry body.
+
+### PhaserDSP
+
+A classic guitar phaser wrapper around `cvdsp::Phaser`, using a cascaded first-order all-pass wet path, logarithmic LFO sweep, limited feedback, selectable stage count, output level and dry/wet mix.
 
 ### ClassicOverdriveDSP
 
@@ -89,6 +101,10 @@ allocation-free and suitable for future VST3/JUCE/CLAP/iPlug2 adapters.
 
 Standalone smoke examples live under:
 
+- `examples/sustainer_dsp`
+- `examples/wah_wah_dsp`
+- `examples/expression_engine_dsp`
+- `examples/phaser_dsp`
 - `examples/classic_overdrive_dsp`
 - `examples/vintage_hard_distortion_dsp`
 - `examples/vintage_fuzz_dsp`

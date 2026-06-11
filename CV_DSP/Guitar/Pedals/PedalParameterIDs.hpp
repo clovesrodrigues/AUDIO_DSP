@@ -32,6 +32,18 @@ inline constexpr PedalParameterID GateEnable = 1020u;
 inline constexpr PedalParameterID GateThreshold = 1021u;
 inline constexpr PedalParameterID GateRelease = 1022u;
 
+inline constexpr PedalParameterID Sustain = 1030u;
+inline constexpr PedalParameterID Attack = 1031u;
+inline constexpr PedalParameterID Release = 1032u;
+inline constexpr PedalParameterID CompressionRatio = 1033u;
+inline constexpr PedalParameterID MakeupGain = 1034u;
+inline constexpr PedalParameterID MaxBoost = 1035u;
+inline constexpr PedalParameterID DetectorMode = 1036u;
+inline constexpr PedalParameterID SidechainHighPassFrequency = 1037u;
+
+inline constexpr PedalParameterID Expression = 1038u;
+inline constexpr PedalParameterID ExpressionSource = 1039u;
+
 inline constexpr PedalParameterID PreHighPassFrequency = 1040u;
 inline constexpr PedalParameterID PreHighPassSlope = 1041u;
 inline constexpr PedalParameterID PreLowPassFrequency = 1042u;
@@ -94,6 +106,20 @@ inline constexpr PedalParameterID HighMidGain = 1140u;
 inline constexpr PedalParameterID HighMidFrequency = 1141u;
 inline constexpr PedalParameterID HighMidQ = 1142u;
 inline constexpr PedalParameterID TightLowCut = 1143u;
+
+inline constexpr PedalParameterID MinFrequency = 1160u;
+inline constexpr PedalParameterID MaxFrequency = 1161u;
+inline constexpr PedalParameterID MinQ = 1162u;
+inline constexpr PedalParameterID MaxQ = 1163u;
+inline constexpr PedalParameterID Taper = 1164u;
+inline constexpr PedalParameterID FilterDrive = 1165u;
+inline constexpr PedalParameterID BandPassGain = 1166u;
+inline constexpr PedalParameterID DryGain = 1167u;
+
+inline constexpr PedalParameterID ModulationRate = 1180u;
+inline constexpr PedalParameterID ModulationDepth = 1181u;
+inline constexpr PedalParameterID Feedback = 1182u;
+inline constexpr PedalParameterID LfoWaveform = 1183u;
 } // namespace PedalParameterIDs
 
 } // namespace cvdsp::guitar::pedals
