@@ -46,7 +46,9 @@ tresult PLUGIN_API SpectralNoiseReducerVST3Controller::initialize (FUnknown* con
     addParameter (parameters, STR16 ("Spectral Floor"), STR16 ("dB"), 0, Params::kDefaultValues[7], Vst::ParameterInfo::kCanAutomate, Params::kSpectralFloor);
     addParameter (parameters, STR16 ("Max Reduction"), STR16 ("dB"), 0, Params::kDefaultValues[8], Vst::ParameterInfo::kCanAutomate, Params::kMaxReduction);
     addParameter (parameters, STR16 ("Smoothing"), STR16 ("%"), 0, Params::kDefaultValues[9], Vst::ParameterInfo::kCanAutomate, Params::kSmoothing);
-    addParameter (parameters, STR16 ("Mix"), STR16 ("%"), 0, Params::kDefaultValues[10], Vst::ParameterInfo::kCanAutomate, Params::kMix);
+    addParameter (parameters, STR16 ("Frequency Smoothing"), STR16 ("bins"), 0, Params::kDefaultValues[10], Vst::ParameterInfo::kCanAutomate, Params::kFrequencySmoothing);
+    addParameter (parameters, STR16 ("Transient Protection"), STR16 ("%"), 0, Params::kDefaultValues[11], Vst::ParameterInfo::kCanAutomate, Params::kTransientProtection);
+    addParameter (parameters, STR16 ("Mix"), STR16 ("%"), 0, Params::kDefaultValues[12], Vst::ParameterInfo::kCanAutomate, Params::kMix);
 
     return result;
 }

@@ -21,7 +21,9 @@ enum : Steinberg::Vst::ParamID
     kSpectralFloor = 7,
     kMaxReduction = 8,
     kSmoothing = 9,
-    kMix = 10
+    kFrequencySmoothing = 10,
+    kTransientProtection = 11,
+    kMix = 12
 };
 
 inline constexpr Steinberg::Vst::ParamID kParameterIDs[] {
@@ -35,6 +37,8 @@ inline constexpr Steinberg::Vst::ParamID kParameterIDs[] {
     kSpectralFloor,
     kMaxReduction,
     kSmoothing,
+    kFrequencySmoothing,
+    kTransientProtection,
     kMix
 };
 
@@ -49,6 +53,8 @@ inline constexpr Steinberg::Vst::ParamValue kDefaultValues[] {
     0.4444444444444444, // Spectral Floor: -120..-12 dB, default -72 dB
     0.6, // Max Reduction: 0..80 dB, default 48 dB
     0.65, // Smoothing
+    0.16666666666666666, // Frequency Smoothing: 0..12 bins, default 2 bins
+    0.25, // Transient Protection
     1.0 // Mix
 };
 

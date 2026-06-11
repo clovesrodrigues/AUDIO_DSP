@@ -15,7 +15,11 @@ The host parameter list exposes the three required controls first:
    be captured.
 
 The plug-in also exposes `Output Gain`, `Presence Protect`, `Reduction Amount`,
-`Spectral Floor`, `Max Reduction`, `Smoothing`, `Mix` and `Bypass`.
+`Spectral Floor`, `Max Reduction`, `Smoothing`, `Frequency Smoothing`,
+`Transient Protection`, `Mix` and `Bypass`. `Frequency Smoothing` and `Transient
+Protection` are intentionally available in the host fallback UI because they are
+the main safety controls for reducing robotic/musical-noise artifacts in
+real-time multi-instance sessions.
 
 ## Recommended recording flow
 
@@ -51,6 +55,8 @@ On Linux the module is emitted under:
 build/examples/spectral_noise_reducer_vst3/VST3/spectral_noise_reducer_vst3.vst3/Contents/x86_64-linux/
 ```
 
-The learned noise profile is runtime state only in this foundation example; save
-or export/import of profiles should be added later if session persistence is
-required.
+Each VST3 instance owns its own stereo pair of reducer objects, so learned
+profiles, FFT buffers, overlap-add rings and gain-smoothing history are isolated
+per track/instance. The learned noise profile is runtime state only in this
+foundation example; save or export/import of profiles should be added later if
+session persistence is required.

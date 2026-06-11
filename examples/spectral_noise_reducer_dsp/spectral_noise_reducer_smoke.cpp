@@ -67,7 +67,16 @@ int main()
     reducer.setMaxReductionDb(48.0f);
     reducer.setPresenceProtect(0.35f);
     reducer.setOutputGainDb(0.0f);
+    reducer.setFrequencySmoothingBins(3);
+    reducer.setTransientProtection(0.4f);
     reducer.setMix(1.0f);
+
+    if (reducer.getFrequencySmoothingBins() != 3
+        || std::fabs(reducer.getTransientProtection() - 0.4f) > 1.0e-6f)
+    {
+        std::cerr << "Advanced smoothing parameters were not applied\n";
+        return 13;
+    }
 
     // Perceber Ruido: enabled. Subtrair Ruidos: disabled while capturing a clean noise-only profile.
     reducer.setLearnNoiseEnabled(true);

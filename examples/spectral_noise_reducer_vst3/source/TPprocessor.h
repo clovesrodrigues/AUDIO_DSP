@@ -39,6 +39,7 @@ private:
     static float normalizedToOutputGainDb (double normalized) noexcept;
     static float normalizedToSpectralFloorDb (double normalized) noexcept;
     static float normalizedToMaxReductionDb (double normalized) noexcept;
+    static std::size_t normalizedToFrequencySmoothingBins (double normalized) noexcept;
     static void clearRemainingOutputs (Steinberg::Vst::ProcessData& data, Steinberg::int32 firstBus) noexcept;
 
     void resetParametersToDefaults () noexcept;
@@ -48,7 +49,7 @@ private:
     void setParameterNormalized (Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue normalizedValue) noexcept;
 
     std::array<DSP, 2> processors_ {};
-    std::array<Steinberg::Vst::ParamValue, 11> parameters_ {};
+    std::array<Steinberg::Vst::ParamValue, 13> parameters_ {};
     double sampleRate_ {44100.0};
     bool bypassed_ {false};
 };

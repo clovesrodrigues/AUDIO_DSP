@@ -10,6 +10,7 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 using namespace Steinberg;
@@ -180,6 +181,11 @@ float SpectralNoiseReducerVST3Processor::normalizedToMaxReductionDb (double norm
     return clamp01 (normalized) * 80.0f;
 }
 
+std::size_t SpectralNoiseReducerVST3Processor::normalizedToFrequencySmoothingBins (double normalized) noexcept
+{
+    return static_cast<std::size_t> (std::lround (clamp01 (normalized) * 12.0f));
+}
+
 void SpectralNoiseReducerVST3Processor::resetParametersToDefaults () noexcept
 {
     for (int32 index = 0; index < Params::kParameterCount; ++index)
@@ -242,6 +248,14 @@ void SpectralNoiseReducerVST3Processor::applyParameterToDSP (
         case Params::kSmoothing:
             for (auto& processor : processors_)
                 processor.setSmoothing (clamp01 (normalizedValue));
+            break;
+        case Params::kFrequencySmoothing:
+            for (auto& processor : processors_)
+                processor.setFrequencySmoothingBins (normalizedToFrequencySmoothingBins (normalizedValue));
+            break;
+        case Params::kTransientProtection:
+            for (auto& processor : processors_)
+                processor.setTransientProtection (clamp01 (normalizedValue));
             break;
         case Params::kMix:
             for (auto& processor : processors_)

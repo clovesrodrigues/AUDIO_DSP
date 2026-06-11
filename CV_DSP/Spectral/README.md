@@ -78,10 +78,15 @@ as an "Advanced" section for users who need finer tuning:
 - `Spectral Floor`: lower safety floor that helps avoid musical-noise bubbling.
 - `Max Reduction`: cap on how far any spectral bin can be attenuated.
 - `Smoothing`: temporal smoothing of attenuation changes.
+- `Frequency Smoothing`: Audacity-style neighboring-bin gain smoothing that avoids isolated-bin attenuation and reduces robotic/phasey artifacts when several instances run together.
+- `Transient Protection`: biases bins that rise clearly above the learned noise profile back toward unity gain so attacks and voiced content do not get mistaken for stationary noise.
 - `Mix`: wet/dry blend for conservative parallel cleanup.
 
 Good defaults should favor transparent reduction over maximum silence. Excessive
-settings can create chirps, watery artifacts or dull transients.
+settings can create chirps, watery artifacts or dull transients. Each reducer
+object owns its FFT engine, overlap-add rings, learned profile and gain history;
+VST3 processors should therefore instantiate one reducer per audio channel and
+per plug-in instance, never a shared/static reducer.
 
 ## APIs
 

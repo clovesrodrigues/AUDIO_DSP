@@ -125,6 +125,8 @@ public:
         outputSpectrum_.fill(static_cast<T>(0));
         reductionCurve_.fill(static_cast<T>(1));
         smoothedGain_.fill(static_cast<T>(1));
+        targetGain_.fill(static_cast<T>(1));
+        frequencySmoothedGain_.fill(static_cast<T>(1));
         averageReductionDb_ = static_cast<T>(0);
     }
 
@@ -133,6 +135,8 @@ public:
         noiseProfileSum_.fill(static_cast<T>(0));
         noiseProfile_.fill(static_cast<T>(0));
         smoothedGain_.fill(static_cast<T>(1));
+        targetGain_.fill(static_cast<T>(1));
+        frequencySmoothedGain_.fill(static_cast<T>(1));
         reductionCurve_.fill(static_cast<T>(1));
         learnedFrameCount_ = 0;
         profileReady_ = false;
@@ -186,6 +190,16 @@ public:
         smoothing_ = clamp01(normalized) * static_cast<T>(0.98);
     }
 
+    void setFrequencySmoothingBins(std::size_t bins) noexcept
+    {
+        frequencySmoothingBins_ = std::min<std::size_t>(bins, kMaxFrequencySmoothingBins);
+    }
+
+    void setTransientProtection(T normalized) noexcept
+    {
+        transientProtection_ = clamp01(normalized);
+    }
+
     void setMix(T normalized) noexcept
     {
         mix_ = clamp01(normalized);
@@ -211,6 +225,9 @@ public:
 
         const bool needsSpectralPath = learnNoiseEnabled_ || subtractNoiseEnabled_;
         if (!needsSpectralPath)
+            return input;
+
+        if (!learnNoiseEnabled_ && subtractNoiseEnabled_ && !profileReady_)
             return input;
 
         const T processed = processStreamingSample(input);
@@ -301,6 +318,8 @@ public:
     [[nodiscard]] T getSpectralFloorDb() const noexcept { return spectralFloorDb_; }
     [[nodiscard]] T getMaxReductionDb() const noexcept { return maxReductionDb_; }
     [[nodiscard]] T getSmoothing() const noexcept { return smoothing_ / static_cast<T>(0.98); }
+    [[nodiscard]] std::size_t getFrequencySmoothingBins() const noexcept { return frequencySmoothingBins_; }
+    [[nodiscard]] T getTransientProtection() const noexcept { return transientProtection_; }
     [[nodiscard]] T getMix() const noexcept { return mix_; }
     [[nodiscard]] T getAverageReductionDb() const noexcept { return averageReductionDb_; }
     [[nodiscard]] static constexpr std::size_t getHopSize() noexcept { return kHopSize; }
@@ -364,6 +383,7 @@ public:
 
 private:
     static constexpr T kMagnitudeFloor = static_cast<T>(1e-20);
+    static constexpr std::size_t kMaxFrequencySmoothingBins = 12;
 
     [[nodiscard]] static T clamp01(T value) noexcept
     {
@@ -459,6 +479,10 @@ private:
 
         fft_.forward(spectrumFrame_.data());
         processSpectrum(spectrumFrame_.data());
+
+        if (!subtractNoiseEnabled_ || !profileReady_)
+            return;
+
         fft_.inverse(spectrumFrame_.data());
 
         for (std::size_t i = 0; i < FFTSize; ++i)
@@ -514,12 +538,14 @@ private:
 
     void subtractProfile(Complex* spectrum) noexcept
     {
-        T reductionDbSum = static_cast<T>(0);
+        buildTargetGainFrame(spectrum);
+        smoothGainFrameAcrossFrequency();
 
+        T reductionDbSum = static_cast<T>(0);
         for (std::size_t bin = 0; bin < kNumBins; ++bin)
         {
             const Complex original = spectrum[bin];
-            const Complex processed = applyReductionToBin(original, bin, reductionDbSum);
+            const Complex processed = applyPreparedGainToBin(original, bin, reductionDbSum);
             spectrum[bin] = processed;
             mirrorConjugateBin(spectrum, bin, processed);
         }
@@ -529,12 +555,14 @@ private:
 
     void subtractProfile(T* fftReal, T* fftImag) noexcept
     {
-        T reductionDbSum = static_cast<T>(0);
+        buildTargetGainFrame(fftReal, fftImag);
+        smoothGainFrameAcrossFrequency();
 
+        T reductionDbSum = static_cast<T>(0);
         for (std::size_t bin = 0; bin < kNumBins; ++bin)
         {
             const Complex original(fftReal[bin], fftImag[bin]);
-            const Complex processed = applyReductionToBin(original, bin, reductionDbSum);
+            const Complex processed = applyPreparedGainToBin(original, bin, reductionDbSum);
             fftReal[bin] = processed.real();
             fftImag[bin] = processed.imag();
         }
@@ -542,11 +570,78 @@ private:
         averageReductionDb_ = reductionDbSum / static_cast<T>(kNumBins);
     }
 
-    [[nodiscard]] Complex applyReductionToBin(const Complex& original, std::size_t bin, T& reductionDbSum) noexcept
+    void buildTargetGainFrame(const Complex* spectrum) noexcept
+    {
+        for (std::size_t bin = 0; bin < kNumBins; ++bin)
+            targetGain_[bin] = computeTargetGain(magnitude(spectrum[bin]), noiseProfile_[bin], bin);
+    }
+
+    void buildTargetGainFrame(const T* fftReal, const T* fftImag) noexcept
+    {
+        for (std::size_t bin = 0; bin < kNumBins; ++bin)
+        {
+            const T inputMagnitude = std::sqrt(fftReal[bin] * fftReal[bin] + fftImag[bin] * fftImag[bin]);
+            targetGain_[bin] = computeTargetGain(inputMagnitude, noiseProfile_[bin], bin);
+        }
+    }
+
+    [[nodiscard]] T computeTargetGain(T inputMagnitude, T profileMagnitude, std::size_t bin) const noexcept
+    {
+        if (inputMagnitude <= kMagnitudeFloor)
+            return static_cast<T>(1);
+
+        const T effectiveReduction = reductionAmount_ * static_cast<T>(3) * presenceReductionScale(bin);
+        const T rawMagnitude = inputMagnitude - effectiveReduction * profileMagnitude;
+        const T minimumMagnitude = inputMagnitude * std::max(spectralFloorGain_, maxReductionGain_);
+        const T targetMagnitude = std::max(rawMagnitude, minimumMagnitude);
+        T targetGain = std::clamp(targetMagnitude / inputMagnitude, static_cast<T>(0), static_cast<T>(1));
+
+        // Audacity-style safety: bins well above the learned profile are likely
+        // wanted signal, not stationary noise. Bias their gain back toward unity
+        // before time/frequency smoothing to avoid isolated-bin robotic artifacts.
+        const T signalExcess = inputMagnitude - profileMagnitude * (static_cast<T>(1) + transientProtection_);
+        if (signalExcess > static_cast<T>(0))
+        {
+            const T denominator = inputMagnitude + profileMagnitude + kMagnitudeFloor;
+            const T protect = clamp01(signalExcess / denominator);
+            targetGain = std::max(targetGain, protect);
+        }
+
+        return targetGain;
+    }
+
+    void smoothGainFrameAcrossFrequency() noexcept
+    {
+        if (frequencySmoothingBins_ == 0)
+        {
+            frequencySmoothedGain_ = targetGain_;
+            return;
+        }
+
+        for (std::size_t bin = 0; bin < kNumBins; ++bin)
+        {
+            const std::size_t first = bin > frequencySmoothingBins_ ? bin - frequencySmoothingBins_ : 0;
+            const std::size_t last = std::min<std::size_t>(kNumBins - 1, bin + frequencySmoothingBins_);
+
+            T weightedSum = static_cast<T>(0);
+            T weightSum = static_cast<T>(0);
+            for (std::size_t neighbor = first; neighbor <= last; ++neighbor)
+            {
+                const std::size_t distance = neighbor > bin ? neighbor - bin : bin - neighbor;
+                const T weight = static_cast<T>(frequencySmoothingBins_ + 1 - distance);
+                weightedSum += targetGain_[neighbor] * weight;
+                weightSum += weight;
+            }
+
+            frequencySmoothedGain_[bin] = weightSum > static_cast<T>(0)
+                ? std::clamp(weightedSum / weightSum, static_cast<T>(0), static_cast<T>(1))
+                : targetGain_[bin];
+        }
+    }
+
+    [[nodiscard]] Complex applyPreparedGainToBin(const Complex& original, std::size_t bin, T& reductionDbSum) noexcept
     {
         const T inputMagnitude = magnitude(original);
-        const T profileMagnitude = noiseProfile_[bin];
-
         if (inputMagnitude <= kMagnitudeFloor)
         {
             outputSpectrum_[bin] = static_cast<T>(0);
@@ -555,11 +650,7 @@ private:
             return Complex(static_cast<T>(0), static_cast<T>(0));
         }
 
-        const T effectiveReduction = reductionAmount_ * static_cast<T>(3) * presenceReductionScale(bin);
-        const T rawMagnitude = inputMagnitude - effectiveReduction * profileMagnitude;
-        const T minimumMagnitude = inputMagnitude * std::max(spectralFloorGain_, maxReductionGain_);
-        const T targetMagnitude = std::max(rawMagnitude, minimumMagnitude);
-        const T targetGain = std::clamp(targetMagnitude / inputMagnitude, static_cast<T>(0), static_cast<T>(1));
+        const T targetGain = frequencySmoothedGain_[bin];
         const T smoothedGain = smoothing_ * smoothedGain_[bin] + (static_cast<T>(1) - smoothing_) * targetGain;
         smoothedGain_[bin] = std::clamp(smoothedGain, static_cast<T>(0), static_cast<T>(1));
 
@@ -626,6 +717,8 @@ private:
     T maxReductionDb_ { static_cast<T>(24) };
     T maxReductionGain_ { static_cast<T>(0.06309573444801933) };
     T smoothing_ { static_cast<T>(0.637) };
+    T transientProtection_ { static_cast<T>(0.25) };
+    std::size_t frequencySmoothingBins_ { 2 };
     T mix_ { static_cast<T>(1) };
     T averageReductionDb_ { static_cast<T>(0) };
     T synthesisGain_ { static_cast<T>(1) };
@@ -647,6 +740,8 @@ private:
     SpectrumView outputSpectrum_ {};
     SpectrumView reductionCurve_ {};
     SpectrumView smoothedGain_ {};
+    SpectrumView targetGain_ {};
+    SpectrumView frequencySmoothedGain_ {};
 };
 
 using SpectralNoiseReducer512F = SpectralNoiseReducer<float, 512>;

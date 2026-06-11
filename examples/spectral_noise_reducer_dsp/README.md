@@ -34,6 +34,9 @@ O smoke example tambem configura:
 - `Presence Protect`: preserva parte da regiao de presenca para evitar som opaco.
 - `Reduction Amount`, `Spectral Floor`, `Max Reduction` e `Mix`: controles de
   agressividade e seguranca contra artefatos de subtracao espectral.
+- `Frequency Smoothing` e `Transient Protection`: suavizacao estilo Audacity entre
+  bins vizinhos e protecao de ataques para reduzir artefatos de voz robotica /
+  musical noise em uso real-time com multiplas instancias.
 
 ## Build com CMake
 
