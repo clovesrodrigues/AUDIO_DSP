@@ -3,6 +3,7 @@
 #include "public.sdk/common/pluginview.h"
 
 #include <memory>
+#include <string>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -41,7 +42,8 @@ class VST3ImGuiView final : public Steinberg::CPluginView
 {
 public:
     explicit VST3ImGuiView (const Steinberg::ViewRect& initialSize,
-                            Steinberg::Vst::EditController* controller = nullptr);
+                            Steinberg::Vst::EditController* controller = nullptr,
+                            const char* editorTitle = nullptr);
     ~VST3ImGuiView () override;
 
     Steinberg::tresult PLUGIN_API isPlatformTypeSupported (Steinberg::FIDString type) override;
@@ -80,6 +82,7 @@ private:
 #endif
 
     std::unique_ptr<VST3::VST3ParameterBridge> parameterBridge_;
+    std::string editorTitle_;
     bool hasFocus_ {false};
 
 #if SMTG_OS_WINDOWS
