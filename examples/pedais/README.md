@@ -127,6 +127,21 @@ wah_wah_vst3
 
 Em Linux, o VST3 SDK bundled pode emitir warnings de formato (`%lld`/`%llu`) em arquivos da Steinberg. Esses warnings vêm do SDK externo e não impedem a geração dos `.vst3`.
 
+
+## O que não entra neste build helper
+
+`build_all_pedals.sh` compila apenas pedais de guitarra em `examples/pedais/*_vst3`.
+Utilitários que não são pedais, como `examples/spectral_noise_reducer_vst3`, devem
+ser compilados separadamente para manter clara a arquitetura: o redutor espectral
+fica no início da cadeia de gravação, antes do set de pedais.
+
+Build do utilitário SpectralNoiseReducer:
+
+```bash
+cmake -S examples/spectral_noise_reducer_vst3 -B /tmp/spectral_noise_reducer_vst3_build
+cmake --build /tmp/spectral_noise_reducer_vst3_build
+```
+
 ## GUI / fallback
 
 Os projetos tentam usar a CV_GUI quando o backend está disponível. Em plataformas sem backend ativo, `createView()` retorna `nullptr`, permitindo que a DAW abra o editor genérico/nativo de parâmetros. Isso mantém os plug-ins utilizáveis mesmo quando a GUI customizada não está pronta, não compila ou não está disponível em tempo real.

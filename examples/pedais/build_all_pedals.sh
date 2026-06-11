@@ -10,6 +10,19 @@ set -euo pipefail
 
 readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly repo_root="$(cd -- "${script_dir}/../.." && pwd)"
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<USAGE
+Usage: examples/pedais/build_all_pedals.sh [build-root]
+
+Builds only guitar pedal VST3 examples under examples/pedais.
+Non-pedal utilities, such as examples/spectral_noise_reducer_vst3, are built separately.
+
+Default build root:
+  /tmp/cv_dsp_pedais_vst3_build
+USAGE
+  exit 0
+fi
+
 readonly build_root="${1:-/tmp/cv_dsp_pedais_vst3_build}"
 
 readonly pedals=(
@@ -35,7 +48,7 @@ done
 
 cat <<SUMMARY
 
-All pedal VST3 examples built successfully.
+All ${#pedals[@]} pedal VST3 examples built successfully.
 Build root: ${build_root}
 
 Linux .vst3 outputs are under:
