@@ -44,6 +44,13 @@ int main()
     CV::SoundFontEngine engine;
     engine.prepare(48000.0);
     engine.setPitchBend(0.25f);
+    assert(std::abs(engine.pitchBend() - 0.25f) < 0.0001f);
+    engine.setPitchBend(2.0f);
+    assert(std::abs(engine.pitchBend() - 1.0f) < 0.0001f);
+    engine.setPitchBend(-2.0f);
+    assert(std::abs(engine.pitchBend() + 1.0f) < 0.0001f);
+    engine.setPitchBend(0.0f);
+    assert(std::abs(engine.pitchBend()) < 0.0001f);
     engine.setMidiController(64, 127);
     engine.allNotesOff();
 

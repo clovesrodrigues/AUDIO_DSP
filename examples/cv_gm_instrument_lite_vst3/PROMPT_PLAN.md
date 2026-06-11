@@ -48,3 +48,8 @@ After Prompt 10/10, do not continue adding features by repeatedly saying `prossi
 ## Post-test correction cycle
 
 After the first Reaper test, the immediate correction scope is limited to Phase 1 and Phase 2: dynamic SoundFont selection, real preset-list synchronization for the selected `.sf2`, and a larger/resizable CV_GUI editor. Expression/bend mapping and deeper audio shaping remain out of scope until selection and layout are proven in Reaper.
+
+
+## Expression bend follow-up
+
+The first musical follow-up after the successful SoundFont selection test maps MIDI CC11 Expression to a centered bend simulator. This is intentionally small: it does not add a full MIDI-learn system or custom Arturia mapping editor yet.

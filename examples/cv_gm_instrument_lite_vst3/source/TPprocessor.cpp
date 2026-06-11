@@ -90,6 +90,18 @@ float normalizePitchBend (const int32 lsb, const int32 msb) noexcept
     return std::clamp ((static_cast<float> (bend14) - 8192.0f) / 8192.0f, -1.0f, 1.0f);
 }
 
+float normalizeExpressionBend (const std::uint8_t value) noexcept
+{
+    constexpr int center = 64;
+    constexpr int deadZone = 2;
+    const int centered = static_cast<int> (value) - center;
+    if (std::abs (centered) <= deadZone)
+        return 0.0f;
+
+    const float denominator = centered > 0 ? 63.0f : 64.0f;
+    return std::clamp (static_cast<float> (centered) / denominator, -1.0f, 1.0f);
+}
+
 std::size_t normalizedToListIndex (Vst::ParamValue normalized, std::size_t itemCount) noexcept
 {
     if (itemCount == 0)
@@ -567,7 +579,8 @@ void CVGMInstrumentLiteProcessor::handleControlChange (std::uint8_t controller, 
             break;
 
         case Vst::kCtrlExpression:
-            midiExpression_ = normalizeControllerValue (value);
+            pitchBend_ = normalizeExpressionBend (value);
+            soundFontEngine_.setPitchBend (pitchBend_);
             break;
 
         case Vst::kCtrlEff1Depth:

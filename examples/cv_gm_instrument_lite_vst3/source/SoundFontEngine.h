@@ -49,6 +49,7 @@ public:
     bool selectPresetByIndex (int presetIndex) noexcept;
     int selectedPresetIndex () const noexcept { return selectedPresetIndex_; }
     std::size_t selectedPresetListIndex () const noexcept { return selectedPresetListIndex_; }
+    float pitchBend () const noexcept { return pitchBend_; }
 
     void noteOn (std::uint8_t note, float velocity) noexcept;
     void noteOff (std::uint8_t note) noexcept;

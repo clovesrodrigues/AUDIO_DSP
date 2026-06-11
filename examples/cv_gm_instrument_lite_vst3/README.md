@@ -66,7 +66,7 @@ Room
 ## Signal path
 
 ```text
-MIDI In -> TinySoundFont Engine -> Volume/MIDI expression -> 3-Band EQ -> Hall Reverb amount (Room) -> Stereo Out
+MIDI In -> TinySoundFont Engine -> Volume/MIDI volume -> 3-Band EQ -> Hall Reverb amount (Room) -> Stereo Out
 ```
 
 ## Scope for version 1
@@ -77,7 +77,7 @@ MIDI In -> TinySoundFont Engine -> Volume/MIDI expression -> 3-Band EQ -> Hall R
 - Reaper MIDI editor playback.
 - Live keyboard/sequencer playback.
 - Volume, Bass, Mid, Treble, and Room only.
-- MIDI velocity, sustain CC64, pitch bend, all-notes-off/all-sounds-off, MIDI Volume CC7, Expression CC11, Reverb Send CC91, and keyboard EQ CC hooks for bass/mid/treble.
+- MIDI velocity, sustain CC64, pitch bend, all-notes-off/all-sounds-off, MIDI Volume CC7, Expression CC11 as a bend simulator, Reverb Send CC91, and keyboard EQ CC hooks for bass/mid/treble.
 - CV_GUI custom editor when enabled in CMake, with DAW generic editor fallback. The CV_GUI view now starts larger and advertises resize support to hosts that allow embedded VST3 editor resizing.
 
 ## Explicit limitations for this closed first cycle
@@ -88,6 +88,11 @@ MIDI In -> TinySoundFont Engine -> Volume/MIDI expression -> 3-Band EQ -> Hall R
 - No bundled or embedded `.sf2` files.
 - No compressor, drive, humanize layer, physical modeling, or synthetic bass voice in this project.
 - No sampler editor, waveform editor, SF2 authoring, or advanced articulation engine.
+
+
+## Expression bend simulator
+
+For keyboards/controllers that send an expression control as MIDI CC11 instead of true pitch-wheel data, CC11 is interpreted as a centered bend simulator: values around 64 return to center, values below 64 bend down, and values above 64 bend up. True pitch-bend messages still work through the normal pitch-wheel path.
 
 ## TinySoundFont audit
 
