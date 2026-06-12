@@ -45,12 +45,14 @@ target_include_directories(obs-audio-dsp-vst3
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../backends/vst3sdk
         ${LIBOBS_INCLUDE_DIR}
 )
 
 target_link_libraries(obs-audio-dsp-vst3
     PRIVATE
         ${LIBOBS_LIBRARY}
+        ${CMAKE_DL_LIBS}
 )
 
 target_compile_definitions(obs-audio-dsp-vst3
