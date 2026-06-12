@@ -44,6 +44,7 @@ add_library(obs-audio-dsp-vst3 MODULE
 target_include_directories(obs-audio-dsp-vst3
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
         ${LIBOBS_INCLUDE_DIR}
 )
 
