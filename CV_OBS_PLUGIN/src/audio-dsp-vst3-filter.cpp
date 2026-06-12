@@ -1,11 +1,12 @@
 #include "CV_OBS_PLUGIN/AudioDspVst3Filter.hpp"
-#include "CV_OBS_PLUGIN/InternalGainProcessor.hpp"
 #include "CV_OBS_PLUGIN/ObsAudioBufferAdapter.hpp"
 #include "CV_OBS_PLUGIN/Vst3StorageModel.hpp"
 
 #include "backends/vst3sdk/public.sdk/vst/moduleinfo/json.h"
+#include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
+#include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivsthostapplication.h"
 #include "pluginterfaces/vst/vstspeaker.h"
 
@@ -15,11 +16,13 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -27,6 +30,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -46,6 +50,8 @@ constexpr const char *kGainDbLabel = "Internal Gain (dB)";
 constexpr const char *kVst3PluginSelectionSetting = "vst3_plugin_selection";
 constexpr const char *kVst3PluginSelectionLabel = "VST3 Plugin";
 constexpr const char *kNoPluginSelectionLabel = "No VST3 plugin selected";
+constexpr const char *kOpenPluginEditorButton = "open_plugin_interface";
+constexpr const char *kOpenPluginEditorLabel = "Open Plugin Interface";
 constexpr double kMinGainDb = -24.0;
 constexpr double kMaxGainDb = 24.0;
 constexpr double kGainDbStep = 0.1;
@@ -106,6 +112,94 @@ public:
       *obj = nullptr;
     return Steinberg::kNoInterface;
   }
+
+private:
+  std::atomic<Steinberg::uint32> refCount_{1};
+};
+
+class MinimalComponentHandler final : public Steinberg::Vst::IComponentHandler {
+public:
+  Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid,
+                                               void **obj) override {
+    if (!obj)
+      return Steinberg::kInvalidArgument;
+
+    *obj = nullptr;
+    if (tuidEquals(iid, INLINE_UID_OF(Steinberg::FUnknown)) ||
+        tuidEquals(iid, INLINE_UID_OF(Steinberg::Vst::IComponentHandler))) {
+      *obj = static_cast<Steinberg::Vst::IComponentHandler *>(this);
+      addRef();
+      return Steinberg::kResultOk;
+    }
+
+    return Steinberg::kNoInterface;
+  }
+
+  Steinberg::uint32 PLUGIN_API addRef() override {
+    return refCount_.fetch_add(1, std::memory_order_relaxed) + 1;
+  }
+
+  Steinberg::uint32 PLUGIN_API release() override {
+    const Steinberg::uint32 previous =
+        refCount_.fetch_sub(1, std::memory_order_relaxed);
+    return previous > 0 ? previous - 1 : 0;
+  }
+
+  Steinberg::tresult PLUGIN_API beginEdit(Steinberg::Vst::ParamID) override {
+    return Steinberg::kResultOk;
+  }
+
+  Steinberg::tresult PLUGIN_API
+  performEdit(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue) override {
+    return Steinberg::kResultOk;
+  }
+
+  Steinberg::tresult PLUGIN_API endEdit(Steinberg::Vst::ParamID) override {
+    return Steinberg::kResultOk;
+  }
+
+  Steinberg::tresult PLUGIN_API restartComponent(Steinberg::int32) override {
+    return Steinberg::kResultOk;
+  }
+
+private:
+  std::atomic<Steinberg::uint32> refCount_{1};
+};
+
+class MinimalPlugFrame final : public Steinberg::IPlugFrame {
+public:
+  Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid,
+                                               void **obj) override {
+    if (!obj)
+      return Steinberg::kInvalidArgument;
+
+    *obj = nullptr;
+    if (tuidEquals(iid, INLINE_UID_OF(Steinberg::FUnknown)) ||
+        tuidEquals(iid, INLINE_UID_OF(Steinberg::IPlugFrame))) {
+      *obj = static_cast<Steinberg::IPlugFrame *>(this);
+      addRef();
+      return Steinberg::kResultOk;
+    }
+
+    return Steinberg::kNoInterface;
+  }
+
+  Steinberg::uint32 PLUGIN_API addRef() override {
+    return refCount_.fetch_add(1, std::memory_order_relaxed) + 1;
+  }
+
+  Steinberg::uint32 PLUGIN_API release() override {
+    const Steinberg::uint32 previous =
+        refCount_.fetch_sub(1, std::memory_order_relaxed);
+    return previous > 0 ? previous - 1 : 0;
+  }
+
+  Steinberg::tresult PLUGIN_API
+  resizeView(Steinberg::IPlugView *view, Steinberg::ViewRect *newSize) override;
+
+#if defined(_WIN32)
+  HWND hwnd = nullptr;
+#endif
 
 private:
   std::atomic<Steinberg::uint32> refCount_{1};
@@ -215,10 +309,140 @@ private:
   bool(PLUGIN_API *moduleExit_)() = nullptr;
 };
 
+struct Vst3EditorWindow {
+  void close() noexcept {
+    if (plugView) {
+      if (attached)
+        plugView->removed();
+      plugView->release();
+      plugView = nullptr;
+    }
+    attached = false;
+
+#if defined(_WIN32)
+    if (hwnd) {
+      HWND windowToDestroy = hwnd;
+      hwnd = nullptr;
+      DestroyWindow(windowToDestroy);
+    }
+    plugFrame.hwnd = nullptr;
+#endif
+  }
+
+  Steinberg::IPlugView *plugView = nullptr;
+  bool attached = false;
+  MinimalPlugFrame plugFrame;
+
+#if defined(_WIN32)
+  HWND hwnd = nullptr;
+#endif
+};
+
+#if defined(_WIN32)
+constexpr const wchar_t *kEditorWindowClassName = L"AUDIO_DSP_VST3_Editor";
+
+LRESULT CALLBACK editorWindowProc(HWND hwnd, UINT message, WPARAM wParam,
+                                  LPARAM lParam) {
+  auto *editorWindow = reinterpret_cast<Vst3EditorWindow *>(
+      GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+
+  switch (message) {
+  case WM_NCCREATE: {
+    const auto *createStruct = reinterpret_cast<CREATESTRUCTW *>(lParam);
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA,
+                      reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
+    return TRUE;
+  }
+  case WM_CLOSE:
+    if (editorWindow)
+      editorWindow->close();
+    return 0;
+  case WM_NCDESTROY:
+    if (editorWindow) {
+      if (editorWindow->plugView && editorWindow->attached)
+        editorWindow->plugView->removed();
+      if (editorWindow->plugView)
+        editorWindow->plugView->release();
+      editorWindow->plugView = nullptr;
+      editorWindow->attached = false;
+      editorWindow->hwnd = nullptr;
+      editorWindow->plugFrame.hwnd = nullptr;
+      SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+    }
+    break;
+  default:
+    break;
+  }
+
+  return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+[[nodiscard]] bool ensureEditorWindowClassRegistered() noexcept {
+  static std::atomic_bool registered{false};
+  if (registered.load(std::memory_order_acquire))
+    return true;
+
+  WNDCLASSEXW windowClass = {};
+  windowClass.cbSize = sizeof(windowClass);
+  windowClass.lpfnWndProc = editorWindowProc;
+  windowClass.hInstance = GetModuleHandleW(nullptr);
+  windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
+  windowClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+  windowClass.lpszClassName = kEditorWindowClassName;
+
+  if (!RegisterClassExW(&windowClass) &&
+      GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    return false;
+
+  registered.store(true, std::memory_order_release);
+  return true;
+}
+
+[[nodiscard]] int viewRectWidth(const Steinberg::ViewRect &rect) noexcept {
+  return static_cast<int>(
+      std::max<Steinberg::CCoord>(rect.right - rect.left, 1));
+}
+
+[[nodiscard]] int viewRectHeight(const Steinberg::ViewRect &rect) noexcept {
+  return static_cast<int>(
+      std::max<Steinberg::CCoord>(rect.bottom - rect.top, 1));
+}
+
+Steinberg::tresult MinimalPlugFrame::resizeView(Steinberg::IPlugView *view,
+                                                Steinberg::ViewRect *newSize) {
+  if (!hwnd || !view || !newSize)
+    return Steinberg::kInvalidArgument;
+
+  RECT windowRect = {0, 0, viewRectWidth(*newSize), viewRectHeight(*newSize)};
+  AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW, FALSE, 0);
+  SetWindowPos(hwnd, nullptr, 0, 0, windowRect.right - windowRect.left,
+               windowRect.bottom - windowRect.top, SWP_NOMOVE | SWP_NOZORDER);
+  return view->onSize(newSize);
+}
+#else
+Steinberg::tresult MinimalPlugFrame::resizeView(Steinberg::IPlugView *view,
+                                                Steinberg::ViewRect *newSize) {
+  if (!view || !newSize)
+    return Steinberg::kInvalidArgument;
+  return view->onSize(newSize);
+}
+#endif
+
 struct Vst3PluginInstance {
   ~Vst3PluginInstance() { reset(); }
 
   void reset() noexcept {
+    editorWindow.close();
+
+    if (editController) {
+      if (editControllerInitializedByHost)
+        editController->terminate();
+      editController->release();
+      editController = nullptr;
+      editControllerInitializedByHost = false;
+    }
+    componentHandler.reset();
+
     if (audioProcessor)
       audioProcessor->setProcessing(false);
 
@@ -251,6 +475,10 @@ struct Vst3PluginInstance {
   Steinberg::IPluginFactory *factory = nullptr;
   Steinberg::Vst::IComponent *component = nullptr;
   Steinberg::Vst::IAudioProcessor *audioProcessor = nullptr;
+  Steinberg::Vst::IEditController *editController = nullptr;
+  bool editControllerInitializedByHost = false;
+  std::unique_ptr<MinimalComponentHandler> componentHandler;
+  Vst3EditorWindow editorWindow;
   std::string pluginPath;
   std::string componentClassId;
   Steinberg::int32 channelCount = 0;
@@ -263,16 +491,66 @@ struct AudioDspVst3FilterState {
   std::atomic_bool bypass{true};
   std::atomic<float> linearGain{1.0F};
   std::atomic_bool backendReloadRequested{false};
+  std::atomic_bool realtimeProcessorBlocked{false};
+  std::atomic<std::uint32_t> activeAudioCallbacks{0};
+  std::atomic<Steinberg::Vst::IAudioProcessor *> realtimeAudioProcessor{
+      nullptr};
+  std::atomic<Steinberg::int32> realtimeChannelCount{0};
   std::mutex selectedPluginMutex;
   std::mutex vst3InstanceMutex;
   std::string selectedPluginIdentifier;
   std::unique_ptr<MinimalVst3HostContext> hostContext{
       std::make_unique<MinimalVst3HostContext>()};
   Vst3PluginInstance vst3Instance;
-  InternalGainProcessor gainProcessor;
 };
 
 const char *getName(void *) { return kPluginDisplayName; }
+
+class RealtimeAudioCallbackScope {
+public:
+  explicit RealtimeAudioCallbackScope(AudioDspVst3FilterState &state) noexcept
+      : state_(state) {
+    state_.activeAudioCallbacks.fetch_add(1, std::memory_order_acq_rel);
+  }
+
+  RealtimeAudioCallbackScope(const RealtimeAudioCallbackScope &) = delete;
+  RealtimeAudioCallbackScope &
+  operator=(const RealtimeAudioCallbackScope &) = delete;
+
+  ~RealtimeAudioCallbackScope() {
+    state_.activeAudioCallbacks.fetch_sub(1, std::memory_order_acq_rel);
+  }
+
+  [[nodiscard]] bool isBlocked() const noexcept {
+    return state_.realtimeProcessorBlocked.load(std::memory_order_acquire);
+  }
+
+private:
+  AudioDspVst3FilterState &state_;
+};
+
+void blockRealtimeVst3Processing(AudioDspVst3FilterState &state) noexcept {
+  state.realtimeProcessorBlocked.store(true, std::memory_order_release);
+  state.realtimeAudioProcessor.store(nullptr, std::memory_order_release);
+  state.realtimeChannelCount.store(0, std::memory_order_release);
+
+  while (state.activeAudioCallbacks.load(std::memory_order_acquire) != 0)
+    std::this_thread::yield();
+}
+
+void publishRealtimeVst3Processor(AudioDspVst3FilterState &state) noexcept {
+  state.realtimeChannelCount.store(state.vst3Instance.channelCount,
+                                   std::memory_order_release);
+  state.realtimeAudioProcessor.store(state.vst3Instance.audioProcessor,
+                                     std::memory_order_release);
+  state.realtimeProcessorBlocked.store(false, std::memory_order_release);
+}
+
+void publishRealtimePassthrough(AudioDspVst3FilterState &state) noexcept {
+  state.realtimeAudioProcessor.store(nullptr, std::memory_order_release);
+  state.realtimeChannelCount.store(0, std::memory_order_release);
+  state.realtimeProcessorBlocked.store(false, std::memory_order_release);
+}
 
 [[nodiscard]] std::string makeModuleConfigRelativePath(const char *fileName) {
   std::string relativePath = vst3_storage::kRootDirectoryName;
@@ -694,6 +972,62 @@ void logVst3LoadError(const char *message, const std::string &pluginPath) {
   blog(LOG_ERROR, "AUDIO_DSP VST3: %s: %s", message, pluginPath.c_str());
 }
 
+[[nodiscard]] bool isEmptyTuid(const Steinberg::TUID classId) noexcept {
+  Steinberg::TUID empty = {};
+  return tuidEquals(classId, empty);
+}
+
+void initializeVst3EditControllerLocked(Vst3PluginInstance &instance,
+                                        MinimalVst3HostContext &hostContext) {
+  if (!instance.component || !instance.factory)
+    return;
+
+  void *controllerObject = nullptr;
+  if (instance.component->queryInterface(
+          INLINE_UID_OF(Steinberg::Vst::IEditController), &controllerObject) ==
+          Steinberg::kResultOk &&
+      controllerObject) {
+    instance.editController =
+        static_cast<Steinberg::Vst::IEditController *>(controllerObject);
+  } else {
+    Steinberg::TUID controllerClassId = {};
+    if (instance.component->getControllerClassId(controllerClassId) !=
+            Steinberg::kResultOk ||
+        isEmptyTuid(controllerClassId)) {
+      blog(LOG_INFO,
+           "AUDIO_DSP VST3: selected plugin does not expose a VST3 edit "
+           "controller");
+      return;
+    }
+
+    if (instance.factory->createInstance(
+            controllerClassId, INLINE_UID_OF(Steinberg::Vst::IEditController),
+            &controllerObject) != Steinberg::kResultOk ||
+        !controllerObject) {
+      blog(LOG_WARNING,
+           "AUDIO_DSP VST3: failed to create VST3 edit controller");
+      return;
+    }
+
+    instance.editController =
+        static_cast<Steinberg::Vst::IEditController *>(controllerObject);
+    if (instance.editController->initialize(&hostContext) !=
+        Steinberg::kResultOk) {
+      blog(LOG_WARNING,
+           "AUDIO_DSP VST3: failed to initialize VST3 edit controller");
+      instance.editController->release();
+      instance.editController = nullptr;
+      instance.editControllerInitializedByHost = false;
+      return;
+    }
+    instance.editControllerInitializedByHost = true;
+  }
+
+  instance.componentHandler = std::make_unique<MinimalComponentHandler>();
+  static_cast<void>(instance.editController->setComponentHandler(
+      instance.componentHandler.get()));
+}
+
 [[nodiscard]] bool
 initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
                                    std::string_view selectedIdentifier) {
@@ -800,6 +1134,8 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
     return false;
   }
 
+  initializeVst3EditControllerLocked(state.vst3Instance, *state.hostContext);
+
   const Steinberg::int32 inputBusCount =
       state.vst3Instance.component->getBusCount(Steinberg::Vst::kAudio,
                                                 Steinberg::Vst::kInput);
@@ -897,15 +1233,120 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
 void reloadSelectedVst3Plugin(AudioDspVst3FilterState &state,
                               std::string_view selectedIdentifier) {
   std::lock_guard<std::mutex> lock(state.vst3InstanceMutex);
+  blockRealtimeVst3Processing(state);
+
   if (selectedIdentifier.empty()) {
     state.vst3Instance.reset();
+    publishRealtimePassthrough(state);
     state.backendReloadRequested.store(false, std::memory_order_release);
     return;
   }
 
-  static_cast<void>(
-      initializeSelectedVst3PluginLocked(state, selectedIdentifier));
+  const bool loaded =
+      initializeSelectedVst3PluginLocked(state, selectedIdentifier);
+  if (loaded)
+    publishRealtimeVst3Processor(state);
+  else
+    publishRealtimePassthrough(state);
+
   state.backendReloadRequested.store(false, std::memory_order_release);
+}
+
+#if defined(_WIN32)
+[[nodiscard]] bool openVst3EditorWindowLocked(Vst3PluginInstance &instance) {
+  if (!instance.editController) {
+    blog(LOG_WARNING,
+         "AUDIO_DSP VST3: selected plugin does not provide a native editor");
+    return false;
+  }
+
+  if (instance.editorWindow.hwnd) {
+    ShowWindow(instance.editorWindow.hwnd, SW_SHOWNORMAL);
+    SetForegroundWindow(instance.editorWindow.hwnd);
+    return true;
+  }
+
+  instance.editorWindow.close();
+  instance.editorWindow.plugView =
+      instance.editController->createView(Steinberg::Vst::ViewType::kEditor);
+  if (!instance.editorWindow.plugView) {
+    blog(LOG_WARNING, "AUDIO_DSP VST3: VST3 editor view creation failed");
+    return false;
+  }
+
+  if (instance.editorWindow.plugView->isPlatformTypeSupported(
+          Steinberg::kPlatformTypeHWND) != Steinberg::kResultOk) {
+    blog(LOG_WARNING,
+         "AUDIO_DSP VST3: VST3 editor does not support HWND embedding");
+    instance.editorWindow.close();
+    return false;
+  }
+
+  Steinberg::ViewRect viewSize = {0, 0, 640, 480};
+  static_cast<void>(instance.editorWindow.plugView->getSize(&viewSize));
+
+  if (!ensureEditorWindowClassRegistered()) {
+    blog(LOG_ERROR,
+         "AUDIO_DSP VST3: failed to register native editor window class");
+    instance.editorWindow.close();
+    return false;
+  }
+
+  RECT windowRect = {0, 0, viewRectWidth(viewSize), viewRectHeight(viewSize)};
+  AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW, FALSE, 0);
+
+  instance.editorWindow.hwnd = CreateWindowExW(
+      0, kEditorWindowClassName, L"AUDIO_DSP VST3 Plugin Interface",
+      WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
+      windowRect.right - windowRect.left, windowRect.bottom - windowRect.top,
+      nullptr, nullptr, GetModuleHandleW(nullptr), &instance.editorWindow);
+  if (!instance.editorWindow.hwnd) {
+    blog(LOG_ERROR, "AUDIO_DSP VST3: failed to create native editor window");
+    instance.editorWindow.close();
+    return false;
+  }
+
+  instance.editorWindow.plugFrame.hwnd = instance.editorWindow.hwnd;
+  static_cast<void>(instance.editorWindow.plugView->setFrame(
+      &instance.editorWindow.plugFrame));
+
+  if (instance.editorWindow.plugView->attached(
+          static_cast<void *>(instance.editorWindow.hwnd),
+          Steinberg::kPlatformTypeHWND) != Steinberg::kResultOk) {
+    blog(LOG_WARNING, "AUDIO_DSP VST3: failed to attach VST3 editor view");
+    instance.editorWindow.close();
+    return false;
+  }
+
+  instance.editorWindow.attached = true;
+  static_cast<void>(instance.editorWindow.plugView->onSize(&viewSize));
+  ShowWindow(instance.editorWindow.hwnd, SW_SHOWNORMAL);
+  UpdateWindow(instance.editorWindow.hwnd);
+  return true;
+}
+#else
+[[nodiscard]] bool openVst3EditorWindowLocked(Vst3PluginInstance &instance) {
+  if (!instance.editController) {
+    blog(LOG_WARNING,
+         "AUDIO_DSP VST3: selected plugin does not provide a native editor");
+    return false;
+  }
+
+  blog(LOG_WARNING,
+       "AUDIO_DSP VST3: native VST3 editor windows are currently implemented "
+       "for Win32 HWND hosts only in this OBS 27 build");
+  return false;
+}
+#endif
+
+bool openPluginInterfaceClicked(obs_properties_t *, obs_property_t *,
+                                void *data) {
+  auto *state = static_cast<AudioDspVst3FilterState *>(data);
+  if (!state)
+    return false;
+
+  std::lock_guard<std::mutex> lock(state->vst3InstanceMutex);
+  return openVst3EditorWindowLocked(state->vst3Instance);
 }
 
 float gainDbToLinear(double gainDb) noexcept {
@@ -952,6 +1393,16 @@ void *create(obs_data_t *settings, obs_source_t *source) {
 
 void destroy(void *data) {
   auto *state = static_cast<AudioDspVst3FilterState *>(data);
+  if (!state)
+    return;
+
+  {
+    std::lock_guard<std::mutex> lock(state->vst3InstanceMutex);
+    blockRealtimeVst3Processing(*state);
+    state->vst3Instance.reset();
+    publishRealtimePassthrough(*state);
+  }
+
   delete state;
 }
 
@@ -961,7 +1412,7 @@ void getDefaults(obs_data_t *settings) {
   obs_data_set_default_string(settings, kVst3PluginSelectionSetting, "");
 }
 
-obs_properties_t *getProperties(void *) {
+obs_properties_t *getProperties(void *data) {
   obs_properties_t *properties = obs_properties_create();
   obs_properties_add_bool(properties, kBypassSetting, kBypassLabel);
   obs_property_t *pluginList = obs_properties_add_list(
@@ -971,6 +1422,8 @@ obs_properties_t *getProperties(void *) {
 
   obs_properties_add_float_slider(properties, kGainDbSetting, kGainDbLabel,
                                   kMinGainDb, kMaxGainDb, kGainDbStep);
+  obs_properties_add_button(properties, kOpenPluginEditorButton,
+                            kOpenPluginEditorLabel, openPluginInterfaceClicked);
   return properties;
 }
 
@@ -982,16 +1435,59 @@ obs_audio_data *filterAudio(void *data, obs_audio_data *audio) {
   if (!audio)
     return nullptr;
 
+  if (state->bypass.load(std::memory_order_relaxed))
+    return audio;
+
+  RealtimeAudioCallbackScope realtimeScope(*state);
+  if (realtimeScope.isBlocked())
+    return audio;
+
+  Steinberg::Vst::IAudioProcessor *audioProcessor =
+      state->realtimeAudioProcessor.load(std::memory_order_acquire);
+  if (!audioProcessor)
+    return audio;
+
   ObsAudioBufferAdapter bufferAdapter(audio);
   if (!bufferAdapter.isValid())
     return audio;
 
-  if (state->bypass.load(std::memory_order_relaxed))
+  const std::size_t channelCount = bufferAdapter.numChannels();
+  const std::size_t frameCount = bufferAdapter.numFrames();
+  const Steinberg::int32 expectedChannelCount =
+      state->realtimeChannelCount.load(std::memory_order_acquire);
+  if (expectedChannelCount <= 0 ||
+      channelCount != static_cast<std::size_t>(expectedChannelCount) ||
+      channelCount > ObsAudioBufferAdapter::kMaxChannels ||
+      frameCount > static_cast<std::size_t>(
+                       std::numeric_limits<Steinberg::int32>::max()))
     return audio;
 
   auto audioView = bufferAdapter.audioView();
-  state->gainProcessor.process(
-      audioView, state->linearGain.load(std::memory_order_relaxed));
+  std::array<Steinberg::Vst::Sample32 *, ObsAudioBufferAdapter::kMaxChannels>
+      channelBuffers{};
+  for (std::size_t channel = 0; channel < channelCount; ++channel)
+    channelBuffers[channel] = audioView.getChannel(channel);
+
+  Steinberg::Vst::AudioBusBuffers inputBus = {};
+  inputBus.numChannels = expectedChannelCount;
+  inputBus.silenceFlags = 0;
+  inputBus.channelBuffers32 = channelBuffers.data();
+
+  Steinberg::Vst::AudioBusBuffers outputBus = {};
+  outputBus.numChannels = expectedChannelCount;
+  outputBus.silenceFlags = 0;
+  outputBus.channelBuffers32 = channelBuffers.data();
+
+  Steinberg::Vst::ProcessData processData = {};
+  processData.processMode = Steinberg::Vst::kRealtime;
+  processData.symbolicSampleSize = Steinberg::Vst::kSample32;
+  processData.numSamples = static_cast<Steinberg::int32>(frameCount);
+  processData.numInputs = 1;
+  processData.numOutputs = 1;
+  processData.inputs = &inputBus;
+  processData.outputs = &outputBus;
+
+  static_cast<void>(audioProcessor->process(processData));
   return audio;
 }
 } // namespace
