@@ -332,7 +332,16 @@ Para compilar um plugin VST3 com CMake:
 cmake -S examples\chorus_vst3 -B build\chorus_vst3 -G "Visual Studio 17 2022" -A x64
 cmake --build build\chorus_vst3 --config Release
 ```
+Para compilar com Ming64
 
+```cmd
+mkdir build
+cd build
+cmake -G "MinGW Makefiles" ..
+ming32-make
+se quiser adicione -4 ou o numero de processadores que vc estiver disponível para usar na compilação
+no caso : ming32-make -j4 (por exemplo)
+```
 ### macOS
 
 1. Instale Xcode Command Line Tools:
