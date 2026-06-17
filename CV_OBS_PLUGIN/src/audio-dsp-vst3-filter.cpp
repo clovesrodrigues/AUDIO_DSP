@@ -1,4 +1,5 @@
 #include "CV_OBS_PLUGIN/AudioDspVst3Filter.hpp"
+#include "CV_OBS_PLUGIN/InternalGainProcessor.hpp"
 #include "CV_OBS_PLUGIN/ObsAudioBufferAdapter.hpp"
 #include "CV_OBS_PLUGIN/Vst3StorageModel.hpp"
 
@@ -1052,19 +1053,6 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
     return false;
   }
 
-  if (selectedEntry->classId.empty()) {
-    logVst3LoadError("selected VST3 cache entry does not contain a class ID",
-                     selectedEntry->path);
-    return false;
-  }
-
-  Steinberg::TUID componentClassId = {};
-  if (!parseVst3ClassId(selectedEntry->classId, componentClassId)) {
-    logVst3LoadError("selected VST3 cache entry contains an invalid class ID",
-                     selectedEntry->path);
-    return false;
-  }
-
   const std::filesystem::path binaryPath =
       resolveVst3BinaryPath(selectedEntry->path);
   if (binaryPath.empty()) {
@@ -1096,6 +1084,43 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
     logVst3LoadError("GetPluginFactory returned null", binaryPath.string());
     state.vst3Instance.reset();
     return false;
+  }
+
+  // Resolve the component class ID: use the one from cache if available,
+  // otherwise auto-discover the first audio processor class in the factory.
+  Steinberg::TUID componentClassId = {};
+  if (!selectedEntry->classId.empty()) {
+    if (!parseVst3ClassId(selectedEntry->classId, componentClassId)) {
+      logVst3LoadError("selected VST3 cache entry contains an invalid class ID",
+                       selectedEntry->path);
+      state.vst3Instance.reset();
+      return false;
+    }
+  } else {
+    constexpr std::string_view kAudioModuleClass = "Audio Module Class";
+    const Steinberg::int32 classCount =
+        state.vst3Instance.factory->countClasses();
+    bool foundClass = false;
+    for (Steinberg::int32 i = 0; i < classCount && !foundClass; ++i) {
+      Steinberg::PClassInfo classInfo = {};
+      if (state.vst3Instance.factory->getClassInfo(i, &classInfo) !=
+          Steinberg::kResultOk)
+        continue;
+      if (std::string_view(classInfo.category) == kAudioModuleClass) {
+        std::memcpy(componentClassId, classInfo.cid, sizeof(Steinberg::TUID));
+        foundClass = true;
+      }
+    }
+    if (!foundClass) {
+      logVst3LoadError(
+          "could not auto-discover audio component class in VST3 binary",
+          binaryPath.string());
+      state.vst3Instance.reset();
+      return false;
+    }
+    blog(LOG_INFO,
+         "AUDIO_DSP VST3: auto-discovered component class in: %s",
+         binaryPath.string().c_str());
   }
 
   void *componentObject = nullptr;
@@ -1165,12 +1190,18 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
   inputArrangements.front() = arrangement;
   outputArrangements.front() = arrangement;
 
-  if (state.vst3Instance.audioProcessor->setBusArrangements(
-          inputArrangements.data(), inputBusCount, outputArrangements.data(),
-          outputBusCount) != Steinberg::kResultOk) {
-    logVst3LoadError("VST3 bus arrangement setup failed", selectedEntry->path);
-    state.vst3Instance.reset();
-    return false;
+  {
+    const Steinberg::tresult busResult =
+        state.vst3Instance.audioProcessor->setBusArrangements(
+            inputArrangements.data(), inputBusCount, outputArrangements.data(),
+            outputBusCount);
+    if (busResult != Steinberg::kResultOk &&
+        busResult != Steinberg::kResultFalse) {
+      logVst3LoadError("VST3 bus arrangement setup failed",
+                       selectedEntry->path);
+      state.vst3Instance.reset();
+      return false;
+    }
   }
 
   if (state.vst3Instance.audioProcessor->canProcessSampleSize(
@@ -1212,11 +1243,16 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
     return false;
   }
 
-  if (state.vst3Instance.audioProcessor->setProcessing(true) !=
-      Steinberg::kResultOk) {
-    logVst3LoadError("VST3 processing activation failed", selectedEntry->path);
-    state.vst3Instance.reset();
-    return false;
+  {
+    const Steinberg::tresult processingResult =
+        state.vst3Instance.audioProcessor->setProcessing(true);
+    if (processingResult != Steinberg::kResultOk &&
+        processingResult != Steinberg::kResultFalse) {
+      logVst3LoadError("VST3 processing activation failed",
+                       selectedEntry->path);
+      state.vst3Instance.reset();
+      return false;
+    }
   }
 
   state.vst3Instance.pluginPath = selectedEntry->path;
@@ -1407,7 +1443,7 @@ void destroy(void *data) {
 }
 
 void getDefaults(obs_data_t *settings) {
-  obs_data_set_default_bool(settings, kBypassSetting, true);
+  obs_data_set_default_bool(settings, kBypassSetting, false);
   obs_data_set_default_double(settings, kGainDbSetting, kDefaultGainDb);
   obs_data_set_default_string(settings, kVst3PluginSelectionSetting, "");
 }
@@ -1442,13 +1478,20 @@ obs_audio_data *filterAudio(void *data, obs_audio_data *audio) {
   if (realtimeScope.isBlocked())
     return audio;
 
+  ObsAudioBufferAdapter bufferAdapter(audio);
+  if (!bufferAdapter.isValid())
+    return audio;
+
+  // Apply internal gain stage (always active when bypass is off)
+  const float linearGain = state->linearGain.load(std::memory_order_relaxed);
+  if (linearGain != 1.0F) {
+    InternalGainProcessor gainProcessor;
+    gainProcessor.process(bufferAdapter.audioView(), linearGain);
+  }
+
   Steinberg::Vst::IAudioProcessor *audioProcessor =
       state->realtimeAudioProcessor.load(std::memory_order_acquire);
   if (!audioProcessor)
-    return audio;
-
-  ObsAudioBufferAdapter bufferAdapter(audio);
-  if (!bufferAdapter.isValid())
     return audio;
 
   const std::size_t channelCount = bufferAdapter.numChannels();
