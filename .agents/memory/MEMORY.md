@@ -1,0 +1,1 @@
+- [CV_OBS_PLUGIN VST3 Host Architecture](cv-obs-plugin-vst3-host.md) — design decisions for scanner, param bridge, X11/ImGui editor, and OBS integration points

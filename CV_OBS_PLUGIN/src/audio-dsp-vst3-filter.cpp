@@ -2,6 +2,9 @@
 #include "CV_OBS_PLUGIN/InternalGainProcessor.hpp"
 #include "CV_OBS_PLUGIN/ObsAudioBufferAdapter.hpp"
 #include "CV_OBS_PLUGIN/Vst3StorageModel.hpp"
+#include "CV_OBS_PLUGIN/Vst3ParameterInfo.hpp"
+#include "CV_OBS_PLUGIN/Vst3Scanner.hpp"
+#include "CV_OBS_PLUGIN/Vst3ImGuiFallback.hpp"
 
 #include "backends/vst3sdk/public.sdk/vst/moduleinfo/json.h"
 #include "pluginterfaces/gui/iplugview.h"
@@ -42,6 +45,12 @@
 #include <dlfcn.h>
 #endif
 
+#if defined(__linux__)
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/Xatom.h>
+#endif
+
 namespace cv_obs_plugin {
 namespace {
 constexpr const char *kBypassSetting = "bypass";
@@ -53,6 +62,9 @@ constexpr const char *kVst3PluginSelectionLabel = "VST3 Plugin";
 constexpr const char *kNoPluginSelectionLabel = "No VST3 plugin selected";
 constexpr const char *kOpenPluginEditorButton = "open_plugin_interface";
 constexpr const char *kOpenPluginEditorLabel = "Open Plugin Interface";
+constexpr const char *kScanPluginsButton = "scan_vst3_plugins";
+constexpr const char *kScanPluginsLabel = "Scan VST3 Plugins";
+constexpr const char *kVst3ParamKeyPrefix = "vst3p_";
 constexpr double kMinGainDb = -24.0;
 constexpr double kMaxGainDb = 24.0;
 constexpr double kGainDbStep = 0.1;
@@ -120,6 +132,9 @@ private:
 
 class MinimalComponentHandler final : public Steinberg::Vst::IComponentHandler {
 public:
+  explicit MinimalComponentHandler(obs_source_t *source = nullptr)
+      : source_(source) {}
+
   Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid,
                                                void **obj) override {
     if (!obj)
@@ -152,6 +167,9 @@ public:
 
   Steinberg::tresult PLUGIN_API
   performEdit(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue) override {
+    // Plugin alterou parâmetro via GUI nativa — atualiza painel de propriedades do OBS
+    if (source_)
+      obs_source_update_properties(source_);
     return Steinberg::kResultOk;
   }
 
@@ -164,6 +182,7 @@ public:
   }
 
 private:
+  obs_source_t *source_ = nullptr;
   std::atomic<Steinberg::uint32> refCount_{1};
 };
 
@@ -200,6 +219,9 @@ public:
 
 #if defined(_WIN32)
   HWND hwnd = nullptr;
+#elif defined(__linux__)
+  Display *x11Display = nullptr;
+  Window   x11Win     = 0;
 #endif
 
 private:
@@ -327,6 +349,19 @@ struct Vst3EditorWindow {
       DestroyWindow(windowToDestroy);
     }
     plugFrame.hwnd = nullptr;
+#elif defined(__linux__)
+    if (x11EventThread.joinable()) {
+      x11EventThreadRunning.store(false, std::memory_order_release);
+      x11EventThread.join();
+    }
+    if (x11Display && x11Win) {
+      XDestroyWindow(x11Display, x11Win);
+      XCloseDisplay(x11Display);
+      x11Win     = 0;
+      x11Display = nullptr;
+    }
+    plugFrame.x11Display = nullptr;
+    plugFrame.x11Win     = 0;
 #endif
   }
 
@@ -336,6 +371,11 @@ struct Vst3EditorWindow {
 
 #if defined(_WIN32)
   HWND hwnd = nullptr;
+#elif defined(__linux__)
+  std::atomic_bool x11EventThreadRunning{false};
+  std::thread      x11EventThread;
+  Display         *x11Display = nullptr;
+  Window           x11Win     = 0;
 #endif
 };
 
@@ -420,6 +460,21 @@ Steinberg::tresult MinimalPlugFrame::resizeView(Steinberg::IPlugView *view,
                windowRect.bottom - windowRect.top, SWP_NOMOVE | SWP_NOZORDER);
   return view->onSize(newSize);
 }
+#elif defined(__linux__)
+Steinberg::tresult MinimalPlugFrame::resizeView(Steinberg::IPlugView *view,
+                                                Steinberg::ViewRect *newSize) {
+  if (!view || !newSize)
+    return Steinberg::kInvalidArgument;
+  // Redimensiona a janela X11 para acomodar o novo tamanho solicitado pelo plugin
+  if (x11Display && x11Win) {
+    const auto w = static_cast<unsigned>(
+        std::max<Steinberg::CCoord>(newSize->right  - newSize->left, 1));
+    const auto h = static_cast<unsigned>(
+        std::max<Steinberg::CCoord>(newSize->bottom - newSize->top,  1));
+    XResizeWindow(x11Display, x11Win, w, h);
+  }
+  return view->onSize(newSize);
+}
 #else
 Steinberg::tresult MinimalPlugFrame::resizeView(Steinberg::IPlugView *view,
                                                 Steinberg::ViewRect *newSize) {
@@ -433,6 +488,8 @@ struct Vst3PluginInstance {
   ~Vst3PluginInstance() { reset(); }
 
   void reset() noexcept {
+    // Fecha o editor ImGui antes de liberar o controller (garante join da thread)
+    closeImGuiFallbackEditor(imguiEditor);
     editorWindow.close();
 
     if (editController) {
@@ -470,6 +527,8 @@ struct Vst3PluginInstance {
     channelCount = 0;
     sampleRate = 0.0;
     maxSamplesPerBlock = 0;
+    parameters.clear();
+    displayName.clear();
   }
 
   std::unique_ptr<SharedLibrary> library;
@@ -485,6 +544,10 @@ struct Vst3PluginInstance {
   Steinberg::int32 channelCount = 0;
   Steinberg::Vst::SampleRate sampleRate = 0.0;
   Steinberg::int32 maxSamplesPerBlock = 0;
+  // Campos adicionados para bridging de parâmetros e fallback ImGui
+  std::vector<CachedParameterInfo>  parameters;
+  std::string                        displayName;
+  Vst3ImGuiEditorState              *imguiEditor = nullptr;
 };
 
 struct AudioDspVst3FilterState {
@@ -504,6 +567,10 @@ struct AudioDspVst3FilterState {
       std::make_unique<MinimalVst3HostContext>()};
   Vst3PluginInstance vst3Instance;
 };
+
+// Declaração antecipada — implementação completa após os helpers de janela nativa.
+// Necessária porque initializeSelectedVst3PluginLocked chama esta função.
+void populateParameterCache(Vst3PluginInstance &instance);
 
 const char *getName(void *) { return kPluginDisplayName; }
 
@@ -979,7 +1046,8 @@ void logVst3LoadError(const char *message, const std::string &pluginPath) {
 }
 
 void initializeVst3EditControllerLocked(Vst3PluginInstance &instance,
-                                        MinimalVst3HostContext &hostContext) {
+                                        MinimalVst3HostContext &hostContext,
+                                        obs_source_t *source) {
   if (!instance.component || !instance.factory)
     return;
 
@@ -1024,7 +1092,7 @@ void initializeVst3EditControllerLocked(Vst3PluginInstance &instance,
     instance.editControllerInitializedByHost = true;
   }
 
-  instance.componentHandler = std::make_unique<MinimalComponentHandler>();
+  instance.componentHandler = std::make_unique<MinimalComponentHandler>(source);
   static_cast<void>(instance.editController->setComponentHandler(
       instance.componentHandler.get()));
 }
@@ -1159,7 +1227,8 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
     return false;
   }
 
-  initializeVst3EditControllerLocked(state.vst3Instance, *state.hostContext);
+  initializeVst3EditControllerLocked(state.vst3Instance, *state.hostContext,
+                                      state.source);
 
   const Steinberg::int32 inputBusCount =
       state.vst3Instance.component->getBusCount(Steinberg::Vst::kAudio,
@@ -1261,8 +1330,13 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
   state.vst3Instance.sampleRate = audioConfiguration.sampleRate;
   state.vst3Instance.maxSamplesPerBlock = audioConfiguration.maxSamplesPerBlock;
 
-  blog(LOG_INFO, "AUDIO_DSP VST3: loaded VST3 plugin: %s",
-       selectedEntry->path.c_str());
+  // Constrói cache de parâmetros para bridging com o painel OBS
+  populateParameterCache(state.vst3Instance);
+  state.vst3Instance.displayName =
+      selectedEntry->name.empty() ? selectedEntry->path : selectedEntry->name;
+
+  blog(LOG_INFO, "AUDIO_DSP VST3: loaded VST3 plugin: %s (%zu parâmetro(s))",
+       selectedEntry->path.c_str(), state.vst3Instance.parameters.size());
   return true;
 }
 
@@ -1360,6 +1434,110 @@ void reloadSelectedVst3Plugin(AudioDspVst3FilterState &state,
   UpdateWindow(instance.editorWindow.hwnd);
   return true;
 }
+#elif defined(__linux__)
+[[nodiscard]] bool openVst3EditorWindowLocked(Vst3PluginInstance &instance) {
+  if (!instance.editController) {
+    blog(LOG_WARNING, "AUDIO_DSP VST3: plugin sem edit controller");
+    return false;
+  }
+
+  // Se janela X11 já está aberta, traz para frente
+  if (instance.editorWindow.x11Win && instance.editorWindow.x11Display) {
+    XRaiseWindow(instance.editorWindow.x11Display, instance.editorWindow.x11Win);
+    XFlush(instance.editorWindow.x11Display);
+    return true;
+  }
+
+  instance.editorWindow.close();
+
+  instance.editorWindow.plugView =
+      instance.editController->createView(Steinberg::Vst::ViewType::kEditor);
+  if (!instance.editorWindow.plugView) {
+    blog(LOG_INFO,
+         "AUDIO_DSP VST3: plugin não tem IPlugView — caller tentará editor ImGui fallback");
+    return false;
+  }
+
+  if (instance.editorWindow.plugView->isPlatformTypeSupported(
+          Steinberg::kPlatformTypeX11EmbedWindowID) != Steinberg::kResultOk) {
+    blog(LOG_WARNING, "AUDIO_DSP VST3: plugin não suporta X11EmbedWindowID");
+    instance.editorWindow.close();
+    return false;
+  }
+
+  Display *dpy = XOpenDisplay(nullptr);
+  if (!dpy) {
+    blog(LOG_ERROR, "AUDIO_DSP VST3: XOpenDisplay falhou");
+    instance.editorWindow.close();
+    return false;
+  }
+
+  Steinberg::ViewRect viewSize = {0, 0, 640, 480};
+  static_cast<void>(instance.editorWindow.plugView->getSize(&viewSize));
+  const unsigned w = static_cast<unsigned>(
+      std::max<Steinberg::CCoord>(viewSize.right - viewSize.left, 64));
+  const unsigned h = static_cast<unsigned>(
+      std::max<Steinberg::CCoord>(viewSize.bottom - viewSize.top, 64));
+
+  XSetWindowAttributes swa = {};
+  swa.event_mask = StructureNotifyMask;
+  Window win = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy),
+                                   0, 0, w, h, 0,
+                                   BlackPixel(dpy, DefaultScreen(dpy)),
+                                   BlackPixel(dpy, DefaultScreen(dpy)));
+  XChangeWindowAttributes(dpy, win, CWEventMask, &swa);
+
+  const std::string title = "AUDIO_DSP VST3 — " + instance.displayName;
+  XStoreName(dpy, win, title.c_str());
+
+  Atom wmDelete = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+  XSetWMProtocols(dpy, win, &wmDelete, 1);
+  XMapRaised(dpy, win);
+  XFlush(dpy);
+
+  instance.editorWindow.x11Display           = dpy;
+  instance.editorWindow.x11Win               = win;
+  instance.editorWindow.plugFrame.x11Display = dpy;
+  instance.editorWindow.plugFrame.x11Win     = win;
+
+  static_cast<void>(
+      instance.editorWindow.plugView->setFrame(&instance.editorWindow.plugFrame));
+
+  if (instance.editorWindow.plugView->attached(
+          reinterpret_cast<void *>(static_cast<std::uintptr_t>(win)),
+          Steinberg::kPlatformTypeX11EmbedWindowID) != Steinberg::kResultOk) {
+    blog(LOG_WARNING, "AUDIO_DSP VST3: attached() falhou para X11EmbedWindowID");
+    instance.editorWindow.close();
+    return false;
+  }
+
+  instance.editorWindow.attached = true;
+  static_cast<void>(instance.editorWindow.plugView->onSize(&viewSize));
+
+  // Thread de eventos X11 — fecha a janela quando o usuário clica no botão X
+  const Atom capturedWmDelete = wmDelete;
+  instance.editorWindow.x11EventThreadRunning.store(true, std::memory_order_release);
+  instance.editorWindow.x11EventThread = std::thread(
+      [&ew = instance.editorWindow, capturedWmDelete]() {
+        Display *d = ew.x11Display;
+        while (ew.x11EventThreadRunning.load(std::memory_order_acquire)) {
+          while (XPending(d) > 0) {
+            XEvent ev;
+            XNextEvent(d, &ev);
+            if (ev.type == ClientMessage &&
+                static_cast<Atom>(ev.xclient.data.l[0]) == capturedWmDelete) {
+              ew.x11EventThreadRunning.store(false, std::memory_order_release);
+              return;
+            }
+          }
+          std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        }
+      });
+
+  blog(LOG_INFO, "AUDIO_DSP VST3: janela X11 nativa aberta para '%s'",
+       instance.displayName.c_str());
+  return true;
+}
 #else
 [[nodiscard]] bool openVst3EditorWindowLocked(Vst3PluginInstance &instance) {
   if (!instance.editController) {
@@ -1367,13 +1545,178 @@ void reloadSelectedVst3Plugin(AudioDspVst3FilterState &state,
          "AUDIO_DSP VST3: selected plugin does not provide a native editor");
     return false;
   }
-
   blog(LOG_WARNING,
-       "AUDIO_DSP VST3: native VST3 editor windows are currently implemented "
-       "for Win32 HWND hosts only in this OBS 27 build");
+       "AUDIO_DSP VST3: native VST3 editor windows not supported on this platform");
   return false;
 }
 #endif
+
+// ─── Helpers: bridging de parâmetros VST3 ↔ painel OBS ───────────────────────
+
+[[nodiscard]] std::string paramPropertyKey(Steinberg::Vst::ParamID id) {
+  return std::string(kVst3ParamKeyPrefix) + std::to_string(id);
+}
+
+// Constrói a lista de parâmetros a partir do IEditController.
+void populateParameterCache(Vst3PluginInstance &instance) {
+  instance.parameters.clear();
+  auto *ctrl = instance.editController;
+  if (!ctrl) return;
+
+  const Steinberg::int32 count = ctrl->getParameterCount();
+  instance.parameters.reserve(static_cast<std::size_t>(count));
+
+  for (Steinberg::int32 i = 0; i < count; ++i) {
+    Steinberg::Vst::ParameterInfo info = {};
+    if (ctrl->getParameterInfo(i, info) != Steinberg::kResultOk) continue;
+    // Ignora parâmetros de mudança de programa
+    if (info.flags & Steinberg::Vst::ParameterInfo::kIsProgramChange) continue;
+
+    CachedParameterInfo param;
+    param.id                = info.id;
+    param.title             = detail::tcharToUtf8(info.title);
+    param.units             = detail::tcharToUtf8(info.units);
+    param.stepCount         = info.stepCount;
+    param.defaultNormalized = info.defaultNormalizedValue;
+    param.flags             = info.flags;
+    instance.parameters.push_back(std::move(param));
+  }
+}
+
+// Adiciona propriedades OBS para cada parâmetro do plugin carregado.
+void addParamProperties(obs_properties_t *props,
+                         const Vst3PluginInstance &instance) {
+  auto *ctrl = instance.editController;
+  if (!ctrl || instance.parameters.empty()) return;
+
+  for (const auto &param : instance.parameters) {
+    using PF = Steinberg::Vst::ParameterInfo;
+    if (param.flags & PF::kIsHidden) continue;
+
+    const std::string key = paramPropertyKey(param.id);
+    const std::string label =
+        param.title + (param.units.empty() ? "" : " (" + param.units + ")");
+
+    if (param.stepCount == 0) {
+      // Contínuo — slider normalizado 0..1
+      obs_properties_add_float_slider(props, key.c_str(), label.c_str(),
+                                      0.0, 1.0, 0.001);
+    } else if (param.stepCount == 1) {
+      // Toggle
+      obs_properties_add_bool(props, key.c_str(), label.c_str());
+    } else {
+      // Discreto — lista com strings de display do próprio plugin
+      obs_property_t *list =
+          obs_properties_add_list(props, key.c_str(), label.c_str(),
+                                  OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+      for (int step = 0; step <= param.stepCount; ++step) {
+        const double normVal =
+            static_cast<double>(step) / static_cast<double>(param.stepCount);
+        Steinberg::Vst::String128 displayStr = {};
+        std::string display;
+        if (ctrl->getParamStringByValue(param.id, normVal, displayStr) ==
+            Steinberg::kResultOk)
+          display = detail::tcharToUtf8(displayStr);
+        else
+          display = std::to_string(step);
+        obs_property_list_add_int(list, display.c_str(), step);
+      }
+    }
+  }
+}
+
+// Lê valores normalizados atuais do VST3 e grava no obs_data (para sliders exibirem
+// os valores corretos quando o painel OBS é aberto).
+void syncParamsFromVst3(obs_data_t *settings,
+                         const Vst3PluginInstance &instance) {
+  auto *ctrl = instance.editController;
+  if (!ctrl || instance.parameters.empty()) return;
+
+  for (const auto &param : instance.parameters) {
+    const std::string key  = paramPropertyKey(param.id);
+    const double      norm = ctrl->getParamNormalized(param.id);
+
+    if (param.stepCount == 1) {
+      obs_data_set_bool(settings, key.c_str(), norm >= 0.5);
+    } else if (param.stepCount == 0) {
+      obs_data_set_double(settings, key.c_str(), norm);
+    } else {
+      const int step =
+          static_cast<int>(std::round(norm * static_cast<double>(param.stepCount)));
+      obs_data_set_int(settings, key.c_str(),
+                       std::clamp(step, 0, param.stepCount));
+    }
+  }
+}
+
+// Lê valores do obs_data e os empurra para o IEditController do plugin.
+void pushParamsToController(obs_data_t *settings,
+                             const Vst3PluginInstance &instance) {
+  auto *ctrl = instance.editController;
+  if (!ctrl || instance.parameters.empty()) return;
+
+  for (const auto &param : instance.parameters) {
+    using PF = Steinberg::Vst::ParameterInfo;
+    if (param.flags & PF::kIsReadOnly) continue;
+
+    const std::string key = paramPropertyKey(param.id);
+    double norm = 0.0;
+
+    if (param.stepCount == 1) {
+      norm = obs_data_get_bool(settings, key.c_str()) ? 1.0 : 0.0;
+    } else if (param.stepCount == 0) {
+      norm = std::clamp(obs_data_get_double(settings, key.c_str()), 0.0, 1.0);
+    } else {
+      const auto step =
+          static_cast<int>(obs_data_get_int(settings, key.c_str()));
+      norm = static_cast<double>(std::clamp(step, 0, param.stepCount)) /
+             static_cast<double>(param.stepCount);
+    }
+
+    static_cast<void>(ctrl->setParamNormalized(param.id, norm));
+  }
+}
+
+// Callback: usuário selecionou outro plugin no dropdown.
+// Recarrega o plugin e pede reconstrução do painel OBS.
+bool onPluginSelectionModified(obs_properties_t *props, obs_property_t *,
+                                obs_data_t *settings) {
+  auto *state =
+      static_cast<AudioDspVst3FilterState *>(obs_properties_get_param(props));
+  if (!state) return true;
+
+  const char *selected =
+      obs_data_get_string(settings, kVst3PluginSelectionSetting);
+  const std::string identifier = selected ? selected : "";
+
+  {
+    std::lock_guard<std::mutex> lock(state->selectedPluginMutex);
+    state->selectedPluginIdentifier = identifier;
+  }
+
+  reloadSelectedVst3Plugin(*state, identifier);
+  // Reconstrói o painel de propriedades para mostrar/esconder parâmetros do plugin
+  obs_source_update_properties(state->source);
+  return true;
+}
+
+// Callback: botão "Scan VST3 Plugins".
+// Escaneia diretórios e repopula o dropdown sem fechar o painel.
+bool onScanPluginsClicked(obs_properties_t *props, obs_property_t *,
+                           void * /*data*/) {
+  scanAndCacheVst3Plugins();
+
+  obs_property_t *pluginList =
+      obs_properties_get(props, kVst3PluginSelectionSetting);
+  if (pluginList) {
+    obs_property_list_clear(pluginList);
+    populateVst3PluginList(pluginList);
+  }
+
+  return true;
+}
+
+// ─── Abertura do editor do plugin ─────────────────────────────────────────────
 
 bool openPluginInterfaceClicked(obs_properties_t *, obs_property_t *,
                                 void *data) {
@@ -1382,7 +1725,24 @@ bool openPluginInterfaceClicked(obs_properties_t *, obs_property_t *,
     return false;
 
   std::lock_guard<std::mutex> lock(state->vst3InstanceMutex);
-  return openVst3EditorWindowLocked(state->vst3Instance);
+
+  // Tenta janela nativa (HWND no Windows, X11EmbedWindowID no Linux)
+  if (openVst3EditorWindowLocked(state->vst3Instance))
+    return true;
+
+  // Fallback Dear ImGui: usado quando o plugin não tem IPlugView
+  Vst3PluginInstance &inst = state->vst3Instance;
+  if (!inst.editController || inst.parameters.empty())
+    return false;
+
+  // Se o editor ImGui já está aberto, não abre outro
+  if (inst.imguiEditor)
+    return true;
+
+  inst.imguiEditor = openImGuiFallbackEditor(
+      inst.displayName.c_str(), inst.parameters, inst.editController);
+
+  return inst.imguiEditor != nullptr;
 }
 
 float gainDbToLinear(double gainDb) noexcept {
@@ -1416,8 +1776,13 @@ void update(void *data, obs_data_t *settings) {
     }
   }
 
-  if (selectedPluginChanged)
+  if (selectedPluginChanged) {
     reloadSelectedVst3Plugin(*state, selectedPluginIdentifier);
+  } else {
+    // Plugin não mudou — empurra alterações do painel OBS para o VST3
+    std::lock_guard<std::mutex> lock(state->vst3InstanceMutex);
+    pushParamsToController(settings, state->vst3Instance);
+  }
 }
 
 void *create(obs_data_t *settings, obs_source_t *source) {
@@ -1449,17 +1814,40 @@ void getDefaults(obs_data_t *settings) {
 }
 
 obs_properties_t *getProperties(void *data) {
+  auto *state = static_cast<AudioDspVst3FilterState *>(data);
   obs_properties_t *properties = obs_properties_create();
+  // Armazena o state para uso nos callbacks (onPluginSelectionModified, etc.)
+  obs_properties_set_param(properties, state, nullptr);
+
   obs_properties_add_bool(properties, kBypassSetting, kBypassLabel);
+
   obs_property_t *pluginList = obs_properties_add_list(
       properties, kVst3PluginSelectionSetting, kVst3PluginSelectionLabel,
       OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
   populateVst3PluginList(pluginList);
+  // Recarrega plugin e reconstrói painel quando o usuário muda a seleção
+  obs_property_set_modified_callback(pluginList, onPluginSelectionModified);
 
   obs_properties_add_float_slider(properties, kGainDbSetting, kGainDbLabel,
                                   kMinGainDb, kMaxGainDb, kGainDbStep);
+  obs_properties_add_button(properties, kScanPluginsButton, kScanPluginsLabel,
+                            onScanPluginsClicked);
   obs_properties_add_button(properties, kOpenPluginEditorButton,
                             kOpenPluginEditorLabel, openPluginInterfaceClicked);
+
+  // Adiciona controles dos parâmetros do plugin VST3 carregado
+  if (state) {
+    std::lock_guard<std::mutex> lock(state->vst3InstanceMutex);
+    if (state->vst3Instance.editController) {
+      addParamProperties(properties, state->vst3Instance);
+      // Sincroniza valores atuais do VST3 → obs_data para sliders exibirem valores corretos
+      if (obs_data_t *settings = obs_source_get_settings(state->source)) {
+        syncParamsFromVst3(settings, state->vst3Instance);
+        obs_data_release(settings);
+      }
+    }
+  }
+
   return properties;
 }
 
