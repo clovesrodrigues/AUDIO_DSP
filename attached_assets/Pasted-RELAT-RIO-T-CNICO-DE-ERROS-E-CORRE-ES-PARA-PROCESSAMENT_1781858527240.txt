@@ -1,0 +1,214 @@
+RELATÓRIO TÉCNICO DE ERROS E CORREÇÕES (PARA PROCESSAMENTO DO REPLIT)
+
+Contexto do Ambiente:
+
+Workspace Raiz: D:/MING64/AUDIO_DSP-main
+
+Pasta do Plugin (CMake): D:/MING64/AUDIO_DSP-main/CV_OBS_PLUGIN
+
+Compilador: GCC/MinGW (Versão 15.2.0) via mingw32-make no Windows.
+
+PARTE 1: HISTÓRICO COMPLETO DE ERROS ENFRENTADOS
+Abaixo estão todos os erros registrados desde o início da compilação, suas causas e o que deve ser corrigido:
+
+Erro 1: Erro de Linkagem VST3 (IID)
+
+Sintoma: undefined reference to Steinberg::IPluginFactory2::iid
+
+Causa: O SDK do VST3 precisa de uma flag global para instanciar as constantes IID no Windows.
+
+Solução: Adicionar add_definitions(-DSMTG_DEFINE_IID) no CMake.
+
+Erro 2: Erro de Linkagem de Janela (ImGui/Windows)
+
+Sintoma: undefined reference to DwmIsCompositionEnabled (e outras APIs do DWM).
+
+Causa: Falta da biblioteca nativa do Windows para o Desktop Window Manager exigida pelo ImGui.
+
+Solução: Adicionar dwmapi ao target_link_libraries.
+
+Erro 3: Caminho Falso do Fonte VST3
+
+Sintoma: Cannot find source file: .../public.sdk/source/vst/vstcomponent.cpp
+
+Causa: O caminho especificado no arquivo original estava errado para a estrutura de pastas do VST3 SDK fornecida.
+
+Solução: Alterar o endereço de compilação em add_library para o endereço validado: public.sdk/vst/vstcomponent.cpp.
+
+Erro 4: Ausência de Declaração de Versão do Plugin
+
+Sintoma: error: 'OBS_AUDIO_DSP_VST3_PLUGIN_VERSION' was not declared in this scope
+
+Causa: O código C++ espera uma macro com a versão do plugin, mas o CMake não a estava enviando para o compilador.
+
+Solução: Adicionar OBS_AUDIO_DSP_VST3_PLUGIN_VERSION="0.1.0" ao target_compile_definitions.
+
+Erro 5: Colisão da Macro NOMINMAX
+
+Sintoma: warning: 'NOMINMAX' redefined em Vst3Scanner.cpp e Vst3ImGuiFallback.cpp.
+
+Causa: Os cabeçalhos padrão do MinGW 15.2.0 (os_defines.h) já definem NOMINMAX. A redefinição manual nos arquivos .cpp gera colisão.
+
+Solução: Remover #define NOMINMAX de todos os arquivos C++ e passá-lo globalmente e de forma segura pelo CMake.
+
+Erro 6: Includes Internos Não Encontrados
+
+Sintoma: fatal error: CV_OBS_PLUGIN/AudioDspVst3Filter.hpp: No such file or directory
+
+Causa: A pasta include interna do próprio plugin não estava exposta ao compilador.
+
+Solução: Adicionar target_include_directories com a rota para ${CMAKE_CURRENT_SOURCE_DIR}/include.
+
+Erro 7: Dependência Externa (CV_DSP) Não Encontrada
+
+Sintoma: fatal error: CV_DSP/Core/AudioBufferView.hpp: No such file or directory
+
+Causa: O módulo depende do subdiretório CV_DSP, mas o compilador não foi instruído a olhar na raiz do Workspace.
+
+Solução: Adicionar o diretório pai (Workspace Root) aos caminhos de include.
+
+Erro 8: Bug do MinGW com Caminhos Relativos ("..")
+
+Sintoma: fatal error: obs-module.h: No such file or directory e fatal error: pluginterfaces/vst/ivsteditcontroller.h: No such file or directory
+
+Causa: O CMake passou caminhos contendo .. (ex: .../CV_OBS_PLUGIN/../backends/) para o GCC (-I). O GCC MinGW falha ao resolver esses saltos de diretório em builds complexos, ignorando as pastas essenciais do OBS e do VST3.
+
+Solução Crítica: O CMake DEVE forçar a tradução dos caminhos para Absolutos usando get_filename_component(VAR "${DIR}/.." ABSOLUTE) antes de injetá-los nos includes.
+
+Erro 9: Conflito de SIMD (SSE x GCC)
+
+Sintoma: warning: '_mm_round_ps' redefined no header simde/x86/sse.h.
+
+Causa: A biblioteca SIMDE do OBS Studio entra em conflito com as definições intrínsecas nativas (smmintrin.h) do GCC 15.2.0 de 64 bits.
+
+Solução: Injetar as macros SIMDE_NO_NATIVE_P_FUNCTIONS=1 e SIMDE_X86_SSE_FORCE_NO_NATIVE=1 no CMake.
+
+Erro 10: Código Linux sendo compilado no Windows
+
+Sintoma: error: '#else' without '#if' seguido por fatal error: dlfcn.h: No such file or directory no arquivo Vst3Scanner.cpp (linha 26/27).
+
+Causa: O arquivo está tentando invocar a biblioteca POSIX <dlfcn.h> (para carregamento de .so dinâmicos) porque o #ifdef para verificar se o sistema é Windows (#ifdef _WIN32) está mal estruturado ou ausente.
+
+Solução: Corrigir as diretivas do pré-processador dentro do Vst3Scanner.cpp.
+
+PARTE 2: INSTRUÇÕES DE CORREÇÃO EM CÓDIGO FONTE (C++)
+O Replit deve executar as seguintes limpezas nos arquivos do projeto CV_OBS_PLUGIN:
+
+Arquivo: src/Vst3ImGuiFallback.cpp
+
+Ação: Localizar e APAGAR a linha que contém #define NOMINMAX.
+
+Arquivo: src/Vst3Scanner.cpp
+
+Ação 1: Localizar e APAGAR a linha que contém #define NOMINMAX.
+
+Ação 2: Localizar a linha 26/27 onde ocorre a tentativa de inclusão do dlfcn.h e o erro de #else. Substituir o bloco de detecção de SO pela seguinte estrutura segura:
+
+C++
+#if defined(_WIN32) || defined(_WIN64)
+    #include <windows.h>
+#else
+    #include <dlfcn.h>
+#endif
+PARTE 3: O CMakeLists.txt DEFINITIVO PARA O REPLIT
+O Replit deve substituir TODO o conteúdo do CMakeLists.txt do projeto obs-audio-dsp-vst3 por este código abaixo. Este arquivo contém a resolução para os erros 1, 2, 3, 4, 5, 6, 7, 8 e 9 listados acima, contornando a falha de resolução de caminhos do compilador e injetando as flags essenciais de compatibilidade com Windows.
+
+CMake
+cmake_minimum_required(VERSION 3.16)
+
+project(obs-audio-dsp-vst3
+    VERSION 0.1.0
+    DESCRIPTION "AUDIO_DSP native OBS audio filter"
+    LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# ─── RESOLUÇÃO DE CAMINHOS ABSOLUTOS (Evita o Bug Relativo do GCC MinGW) ────
+get_filename_component(WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+
+set(PLUGIN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(CV_DSP_INCLUDE_DIR "${WORKSPACE_DIR}")
+set(OBS_DIR            "${WORKSPACE_DIR}/backends/obs-studio/libobs")
+set(IMGUI_DIR          "${WORKSPACE_DIR}/backends/imgui")
+set(VST3_SDK_DIR       "${WORKSPACE_DIR}/backends/vst3sdk")
+
+# ─── TRAVAS DE SEGURANÇA (Verificação pré-compilação) ───────────────────────
+if(NOT EXISTS "${OBS_DIR}/obs-module.h")
+    message(FATAL_ERROR "[REPLIT FIX] Erro Crítico: obs-module.h nao encontrado em: ${OBS_DIR}")
+endif()
+
+if(NOT EXISTS "${VST3_SDK_DIR}/pluginterfaces/vst/ivsteditcontroller.h")
+    message(FATAL_ERROR "[REPLIT FIX] Erro Crítico: ivsteditcontroller.h nao encontrado em: ${VST3_SDK_DIR}")
+endif()
+
+# ─── CONFIGURAÇÃO DE LINKAGEM DO OBS STUDIO ─────────────────────────────────
+set(LIBOBS_LIBRARY "" CACHE FILEPATH "Path" FORCE)
+find_library(LIBOBS_LIBRARY NAMES obs libobs PATHS "${OBS_DIR}" NO_DEFAULT_PATH)
+if(NOT LIBOBS_LIBRARY)
+    link_directories("${OBS_DIR}")
+    set(LIBOBS_LIBRARY "-lobs")
+endif()
+
+# ─── DEFINIÇÕES VST3 ────────────────────────────────────────────────────────
+add_definitions(-DSMTG_DEFINE_IID)
+
+# ─── ARQUIVOS FONTE DO PROJETO ──────────────────────────────────────────────
+add_library(obs-audio-dsp-vst3 MODULE
+    src/audio-dsp-vst3-filter.cpp
+    src/plugin-main.cpp
+    src/Vst3Scanner.cpp
+    src/Vst3ImGuiFallback.cpp
+    
+    # ImGui Core
+    "${IMGUI_DIR}/imgui.cpp"
+    "${IMGUI_DIR}/imgui_draw.cpp"
+    "${IMGUI_DIR}/imgui_widgets.cpp"
+    "${IMGUI_DIR}/imgui_tables.cpp"
+    "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
+    
+    # VST3 SDK Core Sources
+    "${VST3_SDK_DIR}/pluginterfaces/base/funknown.cpp"
+    "${VST3_SDK_DIR}/public.sdk/vst/vstcomponent.cpp"
+)
+
+# ─── INCLUDES (Caminhos Absolutos Seguros) ──────────────────────────────────
+target_include_directories(obs-audio-dsp-vst3
+    PRIVATE
+        "${PLUGIN_INCLUDE_DIR}"
+        "${CV_DSP_INCLUDE_DIR}"
+        "${VST3_SDK_DIR}"
+        "${OBS_DIR}"
+        "${IMGUI_DIR}"
+        "${IMGUI_DIR}/backends"
+)
+
+# ─── DEFINIÇÕES DE MACROS E FLAGS ───────────────────────────────────────────
+target_compile_definitions(obs-audio-dsp-vst3
+    PRIVATE
+        OBS_AUDIO_DSP_VST3_PLUGIN_VERSION="0.1.0"
+        NOMINMAX
+        _CRT_SECURE_NO_WARNINGS
+        SIMDE_NO_NATIVE_P_FUNCTIONS=1
+        SIMDE_X86_SSE_FORCE_NO_NATIVE=1
+)
+
+# ─── LINKER DO SISTEMA (dwmapi injetado para resolver DwmIsCompositionEnabled)
+target_link_libraries(obs-audio-dsp-vst3
+    PRIVATE
+        ${LIBOBS_LIBRARY}
+        opengl32
+        gdi32
+        dwmapi
+        ${CMAKE_DL_LIBS}
+)
+
+# ─── ESPECÍFICO PARA BUILD WINDOWS ──────────────────────────────────────────
+if(WIN32)
+    target_sources(obs-audio-dsp-vst3 PRIVATE "${IMGUI_DIR}/backends/imgui_impl_win32.cpp")
+    set_target_properties(obs-audio-dsp-vst3 PROPERTIES SUFFIX ".dll")
+endif()
+
+set_target_properties(obs-audio-dsp-vst3 PROPERTIES PREFIX "" OUTPUT_NAME "obs-audio-dsp-vst3")

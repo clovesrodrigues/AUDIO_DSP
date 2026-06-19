@@ -21,8 +21,7 @@
 
 // ─── Includes específicos de plataforma ──────────────────────────────────────
 
-#if defined(_WIN32)
-#  define NOMINMAX
+#if defined(_WIN32) || defined(_WIN64)
 #  include <windows.h>
 #  include <GL/gl.h>
 #  include "backends/imgui_impl_win32.h"

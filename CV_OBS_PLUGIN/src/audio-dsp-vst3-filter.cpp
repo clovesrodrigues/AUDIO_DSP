@@ -38,8 +38,7 @@
 #include <utility>
 #include <vector>
 
-#if defined(_WIN32)
-#define NOMINMAX
+#if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 #else
 #include <dlfcn.h>
