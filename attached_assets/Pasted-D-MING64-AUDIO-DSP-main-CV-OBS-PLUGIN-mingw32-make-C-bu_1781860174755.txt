@@ -1,0 +1,81 @@
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN>mingw32-make -C build
+mingw32-make: Entering directory 'D:/MING64/AUDIO_DSP-main/CV_OBS_PLUGIN/build'
+[  7%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/src/audio-dsp-vst3-filter.cpp.obj[0m
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp: In function 'int cv_obs_plugin::{anonymous}::viewRectWidth(const Steinberg::ViewRect&)':
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:443:27: error: 'CCoord' is not a member of 'Steinberg'; did you mean 'UCoord'?
+  443 |       std::max<Steinberg::CCoord>(rect.right - rect.left, 1));
+      |                           ^~~~~~
+      |                           UCoord
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:443:34: error: no matching function for call to 'max<<expression error> >(int, int)'
+  443 |       std::max<Steinberg::CCoord>(rect.right - rect.left, 1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:443:34: note: there are 4 candidates
+In file included from D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/specfun.h:43,
+                 from D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/cmath:3913,
+                 from D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/math.h:36,
+                 from D:/MING64/AUDIO_DSP-main/backends/obs-studio/libobs/graphics/vec2.h:21,
+                 from D:/MING64/AUDIO_DSP-main/backends/obs-studio/libobs/obs.h:25,
+                 from D:/MING64/AUDIO_DSP-main/backends/obs-studio/libobs/obs-module.h:20,
+                 from D:/MING64/AUDIO_DSP-main/CV_OBS_PLUGIN/include/CV_OBS_PLUGIN/AudioDspVst3Filter.hpp:4,
+                 from D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:1:
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:258:5: note: candidate 1: 'template<class _Tp> constexpr const _Tp& std::max(const _Tp&, const _Tp&)'
+  258 |     max(const _Tp& __a, const _Tp& __b)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:258:5: note: template argument deduction/substitution failed:
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:443:34: error: template argument 1 is invalid
+  443 |       std::max<Steinberg::CCoord>(rect.right - rect.left, 1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:304:5: note: candidate 2: 'template<class _Tp, class _Compare> constexpr const _Tp& std::max(const _Tp&, const _Tp&, _Compare)'
+  304 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:304:5: note: candidate expects 3 arguments, 2 provided
+In file included from D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/algorithm:63,
+                 from D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:17:
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5784:5: note: candidate 3: 'template<class _Tp> constexpr _Tp std::max(initializer_list<_Tp>)'
+ 5784 |     max(initializer_list<_Tp> __l)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5784:5: note: candidate expects 1 argument, 2 provided
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5794:5: note: candidate 4: 'template<class _Tp, class _Compare> constexpr _Tp std::max(initializer_list<_Tp>, _Compare)'
+ 5794 |     max(initializer_list<_Tp> __l, _Compare __comp)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5794:5: note: template argument deduction/substitution failed:
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:443:34: error: template argument 1 is invalid
+  443 |       std::max<Steinberg::CCoord>(rect.right - rect.left, 1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp: In function 'int cv_obs_plugin::{anonymous}::viewRectHeight(const Steinberg::ViewRect&)':
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:448:27: error: 'CCoord' is not a member of 'Steinberg'; did you mean 'UCoord'?
+  448 |       std::max<Steinberg::CCoord>(rect.bottom - rect.top, 1));
+      |                           ^~~~~~
+      |                           UCoord
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:448:34: error: no matching function for call to 'max<<expression error> >(int, int)'
+  448 |       std::max<Steinberg::CCoord>(rect.bottom - rect.top, 1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:448:34: note: there are 4 candidates
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:258:5: note: candidate 1: 'template<class _Tp> constexpr const _Tp& std::max(const _Tp&, const _Tp&)'
+  258 |     max(const _Tp& __a, const _Tp& __b)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:258:5: note: template argument deduction/substitution failed:
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:448:34: error: template argument 1 is invalid
+  448 |       std::max<Steinberg::CCoord>(rect.bottom - rect.top, 1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:304:5: note: candidate 2: 'template<class _Tp, class _Compare> constexpr const _Tp& std::max(const _Tp&, const _Tp&, _Compare)'
+  304 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algobase.h:304:5: note: candidate expects 3 arguments, 2 provided
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5784:5: note: candidate 3: 'template<class _Tp> constexpr _Tp std::max(initializer_list<_Tp>)'
+ 5784 |     max(initializer_list<_Tp> __l)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5784:5: note: candidate expects 1 argument, 2 provided
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5794:5: note: candidate 4: 'template<class _Tp, class _Compare> constexpr _Tp std::max(initializer_list<_Tp>, _Compare)'
+ 5794 |     max(initializer_list<_Tp> __l, _Compare __comp)
+      |     ^~~
+D:/MING64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/c++/bits/stl_algo.h:5794:5: note: template argument deduction/substitution failed:
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN\src\audio-dsp-vst3-filter.cpp:448:34: error: template argument 1 is invalid
+  448 |       std::max<Steinberg::CCoord>(rect.bottom - rect.top, 1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+mingw32-make[2]: *** [CMakeFiles\obs-audio-dsp-vst3.dir\build.make:79: CMakeFiles/obs-audio-dsp-vst3.dir/src/audio-dsp-vst3-filter.cpp.obj] Error 1
+mingw32-make[1]: *** [CMakeFiles\Makefile2:86: CMakeFiles/obs-audio-dsp-vst3.dir/all] Error 2
+mingw32-make: *** [Makefile:90: all] Error 2
+mingw32-make: Leaving directory 'D:/MING64/AUDIO_DSP-main/CV_OBS_PLUGIN/build'
+
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN>

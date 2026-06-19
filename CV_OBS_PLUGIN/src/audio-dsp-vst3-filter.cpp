@@ -439,13 +439,11 @@ LRESULT CALLBACK editorWindowProc(HWND hwnd, UINT message, WPARAM wParam,
 }
 
 [[nodiscard]] int viewRectWidth(const Steinberg::ViewRect &rect) noexcept {
-  return static_cast<int>(
-      std::max<Steinberg::CCoord>(rect.right - rect.left, 1));
+  return std::max(static_cast<int>(rect.right - rect.left), 1);
 }
 
 [[nodiscard]] int viewRectHeight(const Steinberg::ViewRect &rect) noexcept {
-  return static_cast<int>(
-      std::max<Steinberg::CCoord>(rect.bottom - rect.top, 1));
+  return std::max(static_cast<int>(rect.bottom - rect.top), 1);
 }
 
 Steinberg::tresult MinimalPlugFrame::resizeView(Steinberg::IPlugView *view,
