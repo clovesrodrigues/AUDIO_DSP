@@ -1,0 +1,25 @@
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN>mingw32-make -C build -j4
+mingw32-make: Entering directory 'D:/MING64/AUDIO_DSP-main/CV_OBS_PLUGIN/build'
+[  7%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/src/audio-dsp-vst3-filter.cpp.obj[0m
+[ 15%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/src/Vst3Scanner.cpp.obj[0m
+[ 23%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/src/plugin-main.cpp.obj[0m
+[ 30%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/src/Vst3ImGuiFallback.cpp.obj[0m
+[ 38%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/imgui/imgui.cpp.obj[0m
+[ 46%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/imgui/imgui_draw.cpp.obj[0m
+[ 53%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/imgui/imgui_widgets.cpp.obj[0m
+[ 61%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/imgui/imgui_tables.cpp.obj[0m
+[ 69%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/imgui/backends/imgui_impl_opengl3.cpp.obj[0m
+[ 76%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/vst3sdk/pluginterfaces/base/funknown.cpp.obj[0m
+[ 84%] [32mBuilding CXX object CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/vst3sdk/public.sdk/vst/vstcomponent.cpp.obj[0m
+In file included from D:\MING64\AUDIO_DSP-main\backends\vst3sdk\public.sdk\vst\vstcomponent.cpp:17:
+D:\MING64\AUDIO_DSP-main\backends\vst3sdk\public.sdk\vst\vstcomponent.h:19:10: fatal error: public.sdk/source/vst/vstcomponentbase.h: No such file or directory
+   19 | #include "public.sdk/source/vst/vstcomponentbase.h"
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+mingw32-make[2]: *** [CMakeFiles\obs-audio-dsp-vst3.dir\build.make:229: CMakeFiles/obs-audio-dsp-vst3.dir/D_/MING64/AUDIO_DSP-main/backends/vst3sdk/public.sdk/vst/vstcomponent.cpp.obj] Error 1
+mingw32-make[2]: *** Waiting for unfinished jobs....
+mingw32-make[1]: *** [CMakeFiles\Makefile2:86: CMakeFiles/obs-audio-dsp-vst3.dir/all] Error 2
+mingw32-make: *** [Makefile:90: all] Error 2
+mingw32-make: Leaving directory 'D:/MING64/AUDIO_DSP-main/CV_OBS_PLUGIN/build'
+
+D:\MING64\AUDIO_DSP-main\CV_OBS_PLUGIN>

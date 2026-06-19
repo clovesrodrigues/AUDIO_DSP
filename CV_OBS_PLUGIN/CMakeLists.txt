@@ -59,9 +59,8 @@ add_library(obs-audio-dsp-vst3 MODULE
     "${IMGUI_DIR}/imgui_tables.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 
-    # VST3 SDK — fontes mínimas para IID e vtables
+    # VST3 SDK — FUID/IID runtime (somente como host; public.sdk não é necessário)
     "${VST3_SDK_DIR}/pluginterfaces/base/funknown.cpp"
-    "${VST3_SDK_DIR}/public.sdk/vst/vstcomponent.cpp"
 )
 
 # ─── INCLUDES (todos absolutos para evitar bug relativo do GCC MinGW) ─────────
