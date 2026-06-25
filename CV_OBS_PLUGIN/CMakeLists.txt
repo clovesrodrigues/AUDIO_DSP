@@ -96,8 +96,10 @@ target_link_libraries(obs-audio-dsp-vst3
 
 # ─── PLATAFORMA: Windows ──────────────────────────────────────────────────────
 if(WIN32)
+    # Keep OBS module entry points in the PE/COFF export table for MinGW/MSVC.
     target_sources(obs-audio-dsp-vst3 PRIVATE
         "${IMGUI_DIR}/backends/imgui_impl_win32.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/obs-audio-dsp-vst3.def"
     )
     target_link_libraries(obs-audio-dsp-vst3 PRIVATE
         opengl32
