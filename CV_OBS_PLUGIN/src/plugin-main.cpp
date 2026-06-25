@@ -5,7 +5,6 @@
 #include <obs-module.h>
 
 #include "CV_OBS_PLUGIN/AudioDspVst3Filter.hpp"
-#include "CV_OBS_PLUGIN/Vst3Scanner.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-audio-dsp-vst3", "pt-BR")
@@ -26,23 +25,23 @@ bool obs_module_load(void) {
     return true;
 }
 
-// Executado após todos os módulos serem carregados — escaneia plugins VST3
-// automaticamente apenas quando o cache ainda não existe.
+// Executado após todos os módulos serem carregados.
+// Não executa varredura automática: plugins VST3 de terceiros podem travar,
+// demorar ou abrir dependências durante o boot do OBS. O usuário inicia a
+// varredura explicitamente pelo botão "Scan VST3 Plugins" nas propriedades.
 void obs_module_post_load(void) {
     bool cacheExists = false;
-    if (char *cachePath =
-            obs_module_config_path("obs-vst3/cache.json")) {
+    if (char *cachePath = obs_module_config_path("obs-vst3/cache.json")) {
         std::error_code ec;
         cacheExists = std::filesystem::exists(cachePath, ec);
         bfree(cachePath);
     }
 
-    if (!cacheExists) {
-        blog(LOG_INFO,
-             "AUDIO_DSP VST3: cache não encontrado — iniciando varredura automática");
-        cv_obs_plugin::scanAndCacheVst3Plugins();
-    } else {
+    if (cacheExists) {
         blog(LOG_INFO,
              "AUDIO_DSP VST3: cache VST3 encontrado — use 'Scan VST3 Plugins' para atualizar");
+    } else {
+        blog(LOG_INFO,
+             "AUDIO_DSP VST3: cache não encontrado — use 'Scan VST3 Plugins' para iniciar a varredura");
     }
 }

@@ -1261,8 +1261,7 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
         state.vst3Instance.audioProcessor->setBusArrangements(
             inputArrangements.data(), inputBusCount, outputArrangements.data(),
             outputBusCount);
-    if (busResult != Steinberg::kResultOk &&
-        busResult != Steinberg::kResultFalse) {
+    if (busResult != Steinberg::kResultOk) {
       logVst3LoadError("VST3 bus arrangement setup failed",
                        selectedEntry->path);
       state.vst3Instance.reset();
@@ -1312,8 +1311,7 @@ initializeSelectedVst3PluginLocked(AudioDspVst3FilterState &state,
   {
     const Steinberg::tresult processingResult =
         state.vst3Instance.audioProcessor->setProcessing(true);
-    if (processingResult != Steinberg::kResultOk &&
-        processingResult != Steinberg::kResultFalse) {
+    if (processingResult != Steinberg::kResultOk) {
       logVst3LoadError("VST3 processing activation failed",
                        selectedEntry->path);
       state.vst3Instance.reset();
