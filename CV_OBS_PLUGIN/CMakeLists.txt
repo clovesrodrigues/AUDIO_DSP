@@ -40,11 +40,6 @@ if(NOT LIBOBS_LIBRARY)
     set(LIBOBS_LIBRARY "-lobs")
 endif()
 
-# ─── SMTG_DEFINE_IID ─────────────────────────────────────────────────────────
-# Necessário para que o VST3 SDK instancie as constantes IID globais no MinGW/MSVC.
-# Sem isso: "undefined reference to Steinberg::IPluginFactory2::iid"
-add_definitions(-DSMTG_DEFINE_IID)
-
 # ─── FONTES DO PLUGIN ─────────────────────────────────────────────────────────
 add_library(obs-audio-dsp-vst3 MODULE
     src/audio-dsp-vst3-filter.cpp
@@ -61,6 +56,7 @@ add_library(obs-audio-dsp-vst3 MODULE
 
     # VST3 SDK — FUID/IID runtime (somente como host; public.sdk não é necessário)
     "${VST3_SDK_DIR}/pluginterfaces/base/funknown.cpp"
+    "${VST3_SDK_DIR}/pluginterfaces/base/coreiids.cpp"
 )
 
 # ─── INCLUDES (todos absolutos para evitar bug relativo do GCC MinGW) ─────────
@@ -108,6 +104,27 @@ if(WIN32)
         # Sem isso: "undefined reference to DwmIsCompositionEnabled"
         dwmapi
     )
+
+    if(MINGW)
+        target_link_options(obs-audio-dsp-vst3 PRIVATE
+            # Export only the OBS module ABI listed in obs-audio-dsp-vst3.def.
+            # Without this, GNU ld can auto-export thousands of C++/ImGui/VST3
+            # symbols, making the plugin harder for OBS/Windows to diagnose.
+            -Wl,--exclude-all-symbols
+            # Avoid requiring MinGW runtime DLLs next to the OBS plugin DLL.
+            -static-libgcc
+            -static-libstdc++
+        )
+        target_link_libraries(obs-audio-dsp-vst3 PRIVATE
+            # GCC's std::thread/std::mutex implementation can still pull
+            # libwinpthread-1.dll even when libgcc/libstdc++ are static. OBS
+            # reports this as LoadLibrary error 126, so link winpthread static.
+            -Wl,-Bstatic
+            winpthread
+            -Wl,-Bdynamic
+        )
+    endif()
+
     set_target_properties(obs-audio-dsp-vst3 PROPERTIES SUFFIX ".dll")
 
 # ─── PLATAFORMA: Linux ────────────────────────────────────────────────────────
