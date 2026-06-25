@@ -115,6 +115,14 @@ if(WIN32)
             -static-libgcc
             -static-libstdc++
         )
+        target_link_libraries(obs-audio-dsp-vst3 PRIVATE
+            # GCC's std::thread/std::mutex implementation can still pull
+            # libwinpthread-1.dll even when libgcc/libstdc++ are static. OBS
+            # reports this as LoadLibrary error 126, so link winpthread static.
+            -Wl,-Bstatic
+            winpthread
+            -Wl,-Bdynamic
+        )
     endif()
 
     set_target_properties(obs-audio-dsp-vst3 PROPERTIES SUFFIX ".dll")
