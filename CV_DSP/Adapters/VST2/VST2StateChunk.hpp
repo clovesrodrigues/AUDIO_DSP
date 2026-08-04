@@ -37,13 +37,18 @@ template<typename T, std::size_t MaxParameters>
         sizeof(VST2StateChunkHeader) + sizeof(VST2StateChunkEntry) * state.size());
 
     std::memcpy(bytes.data(), &header, sizeof(header));
-    auto* entries = reinterpret_cast<VST2StateChunkEntry*>(bytes.data() + sizeof(header));
 
     for (std::size_t index = 0; index < state.size(); ++index)
     {
         const auto* info = state.getInfoByIndex(index);
-        entries[index].id = info != nullptr ? info->id : 0u;
-        entries[index].normalized = state.getNormalizedByIndex(index);
+        VST2StateChunkEntry entry {};
+        entry.id = info != nullptr ? info->id : 0u;
+        entry.normalized = state.getNormalizedByIndex(index);
+
+        std::memcpy(
+            bytes.data() + sizeof(header) + sizeof(VST2StateChunkEntry) * index,
+            &entry,
+            sizeof(entry));
     }
 
     return bytes;
@@ -64,18 +69,24 @@ template<typename T, std::size_t MaxParameters, typename Callback>
     if (header.magic != kStateChunkMagic || header.version != kStateChunkVersion)
         return false;
 
+    if (header.count > MaxParameters)
+        return false;
+
     const std::size_t requiredSize =
         sizeof(VST2StateChunkHeader) + sizeof(VST2StateChunkEntry) * static_cast<std::size_t>(header.count);
     if (byteSize < static_cast<VstInt32>(requiredSize))
         return false;
 
-    const auto* entries = reinterpret_cast<const VST2StateChunkEntry*>(
-        static_cast<const std::uint8_t*>(data) + sizeof(VST2StateChunkHeader));
-
     for (std::uint32_t entryIndex = 0; entryIndex < header.count; ++entryIndex)
     {
-        const manager::ParameterID id = entries[entryIndex].id;
-        const NormalizedValue normalized = std::clamp(entries[entryIndex].normalized, 0.0f, 1.0f);
+        VST2StateChunkEntry entry {};
+        std::memcpy(
+            &entry,
+            static_cast<const std::uint8_t*>(data) + sizeof(VST2StateChunkHeader) + sizeof(VST2StateChunkEntry) * entryIndex,
+            sizeof(entry));
+
+        const manager::ParameterID id = entry.id;
+        const NormalizedValue normalized = std::clamp(entry.normalized, 0.0f, 1.0f);
         if (state.setNormalizedByID(id, normalized))
             onParameterRestored(id, normalized);
     }

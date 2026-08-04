@@ -92,6 +92,9 @@ public:
 
     VstInt32 getChunk(void** data, bool /*isPreset*/ = false) override
     {
+        if (data == nullptr)
+            return 0;
+
         chunkData_ = makeStateChunk(parameters_);
         *data = chunkData_.empty() ? nullptr : chunkData_.data();
         return static_cast<VstInt32>(chunkData_.size());
@@ -105,6 +108,17 @@ public:
             })
             ? 1
             : 0;
+    }
+
+    bool canParameterBeAutomated(VstInt32 index) override
+    {
+        const auto* info = index >= 0 ? parameters_.getInfoByIndex(static_cast<std::size_t>(index)) : nullptr;
+        if (info == nullptr || info->descriptor == nullptr)
+            return false;
+
+        return info->descriptor->hasFlag(manager::ParameterFlag::Automatable)
+            && !info->descriptor->hasFlag(manager::ParameterFlag::ReadOnly)
+            && !info->descriptor->hasFlag(manager::ParameterFlag::Hidden);
     }
 
     void setSampleRate(float sampleRate) override
@@ -168,6 +182,9 @@ protected:
 
     [[nodiscard]] const parameter_state_type& parameterState() const noexcept { return parameters_; }
     [[nodiscard]] parameter_state_type& parameterState() noexcept { return parameters_; }
+
+    [[nodiscard]] float activeSampleRate() const noexcept { return activeSampleRate_; }
+    [[nodiscard]] VstInt32 activeBlockSize() const noexcept { return activeBlockSize_; }
 
     void applyAllParametersToDSP() noexcept
     {

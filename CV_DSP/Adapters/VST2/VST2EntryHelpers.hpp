@@ -8,6 +8,8 @@
 
 #include "VST2EffectBase.hpp"
 
+#include <new>
+
 namespace cvdsp::adapters::vst2
 {
 
@@ -17,7 +19,10 @@ template<typename Plugin>
     if (audioMaster == nullptr)
         return nullptr;
 
-    auto* plugin = new Plugin(audioMaster);
+    auto* plugin = new (std::nothrow) Plugin(audioMaster);
+    if (plugin == nullptr)
+        return nullptr;
+
     return plugin->getAeffect();
 }
 
