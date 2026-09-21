@@ -21,7 +21,7 @@ AEffect* VSTPluginMain(audioMasterCallback audioMaster)
     return createSustainerVST2(audioMaster);
 }
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 __declspec(dllexport)
 AEffect* main(audioMasterCallback audioMaster)
 {
@@ -30,4 +30,3 @@ AEffect* main(audioMasterCallback audioMaster)
 #endif
 
 } // extern "C"
-

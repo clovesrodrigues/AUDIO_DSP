@@ -19,6 +19,22 @@ configuring a 32-bit generator/toolchain.
 
 ## Build the priority plugins
 
+### MinGW-w64
+
+The projects also support a 64-bit MinGW-w64 shell. From that shell, run:
+
+```powershell
+cmake -S examples/pedais/sustainer_vst2 -B build/sustainer_vst2 -G "MinGW Makefiles"
+cmake --build build/sustainer_vst2 -j4
+
+cmake -S examples/graphic_eq_vst2 -B build/graphic_eq_vst2 -G "MinGW Makefiles"
+cmake --build build/graphic_eq_vst2 -j4
+```
+
+On MinGW, the plugins export `VSTPluginMain`, which is the VST2 entry point.
+The optional legacy `main` alias is compiled only with MSVC because MinGW
+reserves `main` as the executable entry point and rejects the VST2 signature.
+
 ### Sustainer
 
 ```powershell

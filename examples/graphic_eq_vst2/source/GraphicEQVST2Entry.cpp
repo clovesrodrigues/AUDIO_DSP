@@ -21,7 +21,7 @@ AEffect* VSTPluginMain(audioMasterCallback audioMaster)
     return createGraphicEQVST2(audioMaster);
 }
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 __declspec(dllexport)
 AEffect* main(audioMasterCallback audioMaster)
 {
